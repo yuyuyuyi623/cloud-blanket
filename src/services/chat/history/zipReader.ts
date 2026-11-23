@@ -1,8 +1,11 @@
 import { Inflate } from 'fflate'
 
 const READ_CHUNK_BYTES = 256 * 1024
+const READ_WINDOW_BYTES = 512 * 1024
 // 控制每轮同步解压的工作量；输出交给调用方保存后才继续读取。
 const INFLATE_CHUNK_BYTES = 8 * 1024
+
+const fileWindows = new WeakMap<File, { start: number; bytes: Uint8Array<ArrayBuffer> }>()
 
 /** ZIP 结构损坏或使用了不支持的特性 */
 export class ArchiveError extends Error {
@@ -18,7 +21,14 @@ const invalid = (): never => {
 
 /** 本地文件头签名 PK\x03\x04，用于在解析前区分 ZIP 与其他文件。 */
 export const isZipFile = async (file: File) => {
-  const bytes = new Uint8Array(await file.slice(0, 4).arrayBuffer())
+  if (file.size < 4) {
+    return false
+  }
+  const cached = fileWindows.get(file)
+  const bytes =
+    cached && cached.start === 0 && cached.bytes.length >= 4
+      ? cached.bytes.subarray(0, 4)
+      : new Uint8Array(await file.slice(0, 4).arrayBuffer())
   return bytes.length === 4 && bytes.every((byte, index) => byte === [0x50, 0x4b, 3, 4][index])
 }
 
@@ -36,11 +46,38 @@ const readBytes = async (file: File, start: number, length: number) => {
   if (start < 0 || length < 0 || start + length > file.size) {
     invalid()
   }
-  const bytes = new Uint8Array(await file.slice(start, start + length).arrayBuffer())
-  if (bytes.length !== length) {
+  if (length === 0) {
+    return new Uint8Array(0)
+  }
+  const cached = fileWindows.get(file)
+  if (cached) {
+    const cachedEnd = cached.start + cached.bytes.length
+    if (start >= cached.start && start + length <= cachedEnd) {
+      const offset = start - cached.start
+      return cached.bytes.subarray(offset, offset + length)
+    }
+    if (start >= cached.start && start < cachedEnd) {
+      const head = cached.bytes.subarray(start - cached.start)
+      const remaining = length - head.length
+      const readLength = Math.min(file.size - cachedEnd, Math.max(READ_WINDOW_BYTES, remaining))
+      const tail = new Uint8Array(await file.slice(cachedEnd, cachedEnd + readLength).arrayBuffer())
+      if (tail.length !== readLength) {
+        invalid()
+      }
+      fileWindows.set(file, { start: cachedEnd, bytes: tail })
+      const merged = new Uint8Array(length)
+      merged.set(head, 0)
+      merged.set(tail.subarray(0, remaining), head.length)
+      return merged
+    }
+  }
+  const readLength = Math.min(file.size - start, Math.max(READ_WINDOW_BYTES, length))
+  const bytes = new Uint8Array(await file.slice(start, start + readLength).arrayBuffer())
+  if (bytes.length !== readLength) {
     invalid()
   }
-  return bytes
+  fileWindows.set(file, { start, bytes })
+  return bytes.subarray(0, length)
 }
 
 /** ZIP64、分卷与加密文件不属于导出格式，一律拒绝。 */
@@ -85,7 +122,14 @@ type Entry = {
   offset: number
 }
 
-const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: number }> => {
+type Directory = { entries: Entry[]; offset: number }
+const directories = new WeakMap<File, Directory>()
+
+const readDirectory = async (file: File): Promise<Directory> => {
+  const cached = directories.get(file)
+  if (cached) {
+    return cached
+  }
   if (file.size < 22) {
     invalid()
   }
@@ -161,7 +205,7 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
     checkExtra(await readBytes(file, offset + cursor + 46 + nameLength, extraLength))
     entries.push({
       path,
-      name,
+      name: name.slice(),
       flags,
       method,
       crc: view.getUint32(16, true),
@@ -174,7 +218,28 @@ const readDirectory = async (file: File): Promise<{ entries: Entry[]; offset: nu
   if (cursor !== size) {
     invalid()
   }
-  return { entries: entries.sort((a, b) => a.offset - b.offset), offset }
+  const directory = { entries: entries.sort((a, b) => a.offset - b.offset), offset }
+  directories.set(file, directory)
+  return directory
+}
+
+const checkDataDescriptor = async (file: File, entry: Entry, end: number, boundary: number) => {
+  if (!(entry.flags & 8)) {
+    return
+  }
+  if (end + 12 > boundary) {
+    invalid()
+  }
+  const descriptor = viewOf(await readBytes(file, end, Math.min(16, boundary - end)))
+  const shift = descriptor.getUint32(0, true) === 0x08074b50 ? 4 : 0
+  if (
+    shift + 12 > descriptor.byteLength ||
+    descriptor.getUint32(shift, true) !== entry.crc ||
+    descriptor.getUint32(shift + 4, true) !== entry.compressedSize ||
+    descriptor.getUint32(shift + 8, true) !== entry.size
+  ) {
+    invalid()
+  }
 }
 
 const readEntryOffset = async (file: File, entry: Entry, boundary: number) => {
@@ -191,7 +256,8 @@ const readEntryOffset = async (file: File, entry: Entry, boundary: number) => {
     view.getUint16(6, true) !== entry.flags ||
     view.getUint16(8, true) !== entry.method ||
     nameLength !== entry.name.length ||
-    end > boundary
+    end > boundary ||
+    (entry.flags & 8 && end + 12 > boundary)
   ) {
     invalid()
   }
@@ -210,21 +276,6 @@ const readEntryOffset = async (file: File, entry: Entry, boundary: number) => {
     invalid()
   }
   checkExtra(metadata.subarray(nameLength))
-  if (entry.flags & 8) {
-    if (end + 12 > boundary) {
-      invalid()
-    }
-    const descriptor = viewOf(await readBytes(file, end, Math.min(16, boundary - end)))
-    const shift = descriptor.getUint32(0, true) === 0x08074b50 ? 4 : 0
-    if (
-      shift + 12 > descriptor.byteLength ||
-      descriptor.getUint32(shift, true) !== entry.crc ||
-      descriptor.getUint32(shift + 4, true) !== entry.compressedSize ||
-      descriptor.getUint32(shift + 8, true) !== entry.size
-    ) {
-      invalid()
-    }
-  }
   return start
 }
 
@@ -236,14 +287,16 @@ export type ArchiveEntry = {
 
 /**
  * 按条目在文件中的物理顺序逐条、逐块解压，跳过目录条目。
- * 调用方必须消费完当前条目的数据，再请求下一个条目。
+ * 读完当前条目再取下一个。数据块可能共享读窗口，请勿修改。
  */
 export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
   const directory = await readDirectory(file)
   for (const [index, entry] of directory.entries.entries()) {
     const boundary = directory.entries[index + 1]?.offset ?? directory.offset
     const start = await readEntryOffset(file, entry, boundary)
+    const end = start + entry.compressedSize
     if (entry.path.endsWith('/')) {
+      await checkDataDescriptor(file, entry, end, boundary)
       continue
     }
     let completed = false
@@ -276,8 +329,8 @@ export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
           continue
         }
         for (let cursor = 0; cursor < chunk.length; cursor += INFLATE_CHUNK_BYTES) {
-          const end = Math.min(cursor + INFLATE_CHUNK_BYTES, chunk.length)
-          inflate.push(chunk.subarray(cursor, end), offset + end === entry.compressedSize)
+          const sliceEnd = Math.min(cursor + INFLATE_CHUNK_BYTES, chunk.length)
+          inflate.push(chunk.subarray(cursor, sliceEnd), offset + sliceEnd === entry.compressedSize)
           // yield 暂停解压，等待调用方完成异步写入；不缓存整个条目。
           yield* pending.splice(0)
         }
@@ -289,6 +342,8 @@ export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
       if (written !== entry.size || (crc ^ 0xffffffff) >>> 0 !== entry.crc) {
         invalid()
       }
+      // 读完正文再检查描述符，避免提前跳到条目末尾。
+      await checkDataDescriptor(file, entry, end, boundary)
       completed = true
     }
     yield { path: entry.path, size: entry.size, stream: stream() }
@@ -296,15 +351,36 @@ export async function* readArchive(file: File): AsyncGenerator<ArchiveEntry> {
       invalid()
     }
   }
+  fileWindows.delete(file)
 }
 
-/** 读出整个条目：会话 JSON 需要完整解析，图片需要识别类型后整张保存。 */
-export const readEntry = async (entry: ArchiveEntry): Promise<Blob> => {
-  const parts: Blob[] = []
+/** detectType 最多接收条目的前 16 字节。 */
+export const readEntry = async (
+  entry: ArchiveEntry,
+  detectType?: (prefix: Uint8Array) => string
+): Promise<Blob> => {
+  const prefix = new Uint8Array(detectType ? Math.min(entry.size, 16) : 0)
+  let prefixLength = 0
+  const parts: BlobPart[] = []
+  let chunks: Uint8Array<ArrayBuffer>[] = []
+  let buffered = 0
   for await (const chunk of entry.stream) {
-    parts.push(new Blob([chunk as Uint8Array<ArrayBuffer>]))
+    if (prefixLength < prefix.length) {
+      const head = chunk.subarray(0, prefix.length - prefixLength)
+      prefix.set(head, prefixLength)
+      prefixLength += head.length
+    }
+    chunks.push(chunk as Uint8Array<ArrayBuffer>)
+    buffered += chunk.length
+    if (buffered >= READ_CHUNK_BYTES) {
+      parts.push(new Blob(chunks))
+      chunks = []
+      buffered = 0
+    }
   }
-  return new Blob(parts)
+  return new Blob([...parts, ...chunks], {
+    type: detectType?.(prefix.subarray(0, prefixLength)),
+  })
 }
 
 /** 不需要的条目也要读完，以校验大小与 CRC。 */

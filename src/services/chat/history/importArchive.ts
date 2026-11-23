@@ -1,4 +1,5 @@
 import * as db from '../db.js'
+import type { Session } from '../types.js'
 import { BackupError, fail } from './errors.js'
 import type { SessionIndexEntry } from './format.js'
 import { INDEX_PATH, MANIFEST_PATH, USER_PATH, parseSessionPath, sessionFilesDir } from './paths.js'
@@ -42,7 +43,12 @@ const imageType = (bytes: Uint8Array): string => {
 }
 
 const readJson = async (entry: ArchiveEntry): Promise<unknown> => {
-  const text = await (await readEntry(entry)).text()
+  const decoder = new TextDecoder('utf-8')
+  let text = ''
+  for await (const chunk of entry.stream) {
+    text += decoder.decode(chunk, { stream: true })
+  }
+  text += decoder.decode()
   try {
     return JSON.parse(text)
   } catch {
@@ -75,7 +81,6 @@ export const checkArchiveFormat = async (file: File): Promise<void> => {
 /**
  * 流式导入：manifest → user（不导入）→ 全部会话 JSON → index → 全部图片。
  * 也支持会话与图片交错排列、index 位于末尾的条目顺序。
- * 会话读完立即暂存，只保留图片路径映射；图片全部读完后逐会话回填 MIME，不改变图片身份。
  * 写入导入暂存存储；调用方负责先清空暂存，成功后替换正式数据，失败时清理暂存。
  */
 export const importArchive = async (file: File): Promise<void> => {
@@ -84,21 +89,53 @@ export const importArchive = async (file: File): Promise<void> => {
   }
   const imported = new Set<string>()
   const images = new Map<string, string>()
-  /** 已保存的原件：文件 ID → MIME。同一图片出现在多个会话目录时只保存一次。 */
+  const fileSessions = new Map<string, Set<string>>()
+  // 同一图片可能出现在多个会话目录，待写入的原件也参与去重。
   const stored = new Map<string, string>()
   let manifest = false
   let index: SessionIndexEntry[] | undefined
   let currentSessionId: string | undefined
 
+  const maxSessionBatchCount = 32
+  const maxSessionBatchBytes = 2 * 1024 * 1024
+  let sessionBatch: Session[] = []
+  let sessionBatchBytes = 0
+  const flushSessions = async () => {
+    if (!sessionBatch.length) {
+      return
+    }
+    await db.addStagingSessions(sessionBatch)
+    sessionBatch = []
+    sessionBatchBytes = 0
+  }
+
+  const maxImageBatchCount = 16
+  const maxImageBatchBytes = 4 * 1024 * 1024
+  let imageBatch: db.StoredFile[] = []
+  let imageBatchBytes = 0
+  const flushImages = async () => {
+    if (!imageBatch.length) {
+      return
+    }
+    await db.saveStagingFiles(imageBatch)
+    imageBatch = []
+    imageBatchBytes = 0
+  }
   const saveImage = async (entry: ArchiveEntry, id: string) => {
     if (stored.has(id)) {
       await skipEntry(entry)
       return
     }
-    const data = await readEntry(entry)
-    const type = imageType(new Uint8Array(await data.slice(0, 16).arrayBuffer()))
-    await db.saveStagingFiles([{ id, blob: new Blob([data], { type }) }])
-    stored.set(id, type)
+    if (imageBatchBytes + entry.size > maxImageBatchBytes) {
+      await flushImages()
+    }
+    const blob = await readEntry(entry, imageType)
+    imageBatch.push({ id, blob })
+    imageBatchBytes += blob.size
+    stored.set(id, blob.type)
+    if (imageBatch.length >= maxImageBatchCount || imageBatchBytes >= maxImageBatchBytes) {
+      await flushImages()
+    }
   }
 
   try {
@@ -115,6 +152,9 @@ export const importArchive = async (file: File): Promise<void> => {
         // 账号信息（已脱敏）不导入；文件可能缺失。
         await skipEntry(entry)
       } else if (sessionId !== null && !index) {
+        if (sessionBatchBytes + entry.size > maxSessionBatchBytes) {
+          await flushSessions()
+        }
         const local = toLocalSession(readSessionFile(await readJson(entry)))
         if (local.session.id !== sessionId || imported.has(sessionId)) {
           fail('backupIncomplete')
@@ -124,9 +164,30 @@ export const importArchive = async (file: File): Promise<void> => {
         for (const [imagePath, id] of local.images) {
           images.set(imagePath, id)
         }
-        await db.addStagingSession(local.session)
+        for (const message of local.session.messages) {
+          if (message.role !== 'user') {
+            continue
+          }
+          for (const attachment of message.files) {
+            let sessions = fileSessions.get(attachment.id)
+            if (!sessions) {
+              sessions = new Set()
+              fileSessions.set(attachment.id, sessions)
+            }
+            sessions.add(sessionId)
+          }
+        }
+        sessionBatch.push(local.session)
+        sessionBatchBytes += entry.size
+        if (
+          sessionBatch.length >= maxSessionBatchCount ||
+          sessionBatchBytes >= maxSessionBatchBytes
+        ) {
+          await flushSessions()
+        }
       } else if (path === INDEX_PATH && !index) {
         index = readSessionIndex(await readJson(entry))
+        await flushSessions()
       } else if (
         index
           ? imported.has(/^chat_sessions\/([^/]+)_files\//.exec(path)?.[1] ?? '')
@@ -155,5 +216,18 @@ export const importArchive = async (file: File): Promise<void> => {
   ) {
     fail('backupIncomplete')
   }
-  await db.updateStagingFileTypes(stored)
+  await flushSessions()
+  await flushImages()
+  const targetSessions = new Set<string>()
+  for (const [id, type] of stored) {
+    if (!type) {
+      continue
+    }
+    for (const sessionId of fileSessions.get(id) ?? []) {
+      targetSessions.add(sessionId)
+    }
+  }
+  if (targetSessions.size > 0) {
+    await db.updateStagingFileTypes(stored, targetSessions)
+  }
 }
