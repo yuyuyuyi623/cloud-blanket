@@ -81,6 +81,10 @@ export const BlanketImportDialog = () => {
   )
 
   const [dragging, setDragging] = useState(false)
+  /** 粘贴导出链接：只负责把浏览器原生下载发起来，不读内容（对方域名没开 CORS） */
+  const [link, setLink] = useState('')
+  const [linkError, setLinkError] = useState<string | null>(null)
+  const [linkSent, setLinkSent] = useState(false)
   /** 每秒刷一次"已用时间"，只在蒸馏中需要 */
   const [now, setNow] = useState(Date.now)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -119,6 +123,28 @@ export const BlanketImportDialog = () => {
     if (file) {
       void chooseArchive(file)
     }
+  }
+
+  /**
+   * 粘贴链接 → 发起原生下载。
+   * 为什么不是 fetch 下来再解析：DeepSeek 的导出域名（对象存储预签名地址）没开 CORS，
+   * 浏览器里 JS 读不到它（2026-11-24 实测：Range 支持、无 Access-Control-Allow-Origin）。
+   * 所以这里只做一次导航式点击，把下载交给浏览器下载器，下完由用户点上面的选文件。
+   */
+  const startDownload = () => {
+    const url = link.trim()
+    if (!/^https:\/\/\S+$/i.test(url)) {
+      setLinkError(t('blanketImportLinkInvalid'))
+      return
+    }
+    setLinkError(null)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.rel = 'noopener'
+    document.body.appendChild(anchor)
+    anchor.click()
+    anchor.remove()
+    setLinkSent(true)
   }
 
   /** 蒸馏中不许关：engine 没有中断能力，关了就是钱花了、记忆没了 */
@@ -170,13 +196,47 @@ export const BlanketImportDialog = () => {
             <input
               ref={inputRef}
               type="file"
-              accept=".zip,application/zip"
+              // accept 放宽：手机文件管理器常把 zip 报成 octet-stream，收窄了会被灰掉选不中。
+              // 真正的校验在解析那一步（describeScanError），前端这层只管别挡人。
+              accept=".zip,application/zip,application/x-zip-compressed,application/octet-stream"
               hidden
               onChange={(event) => {
                 pickFile(event.target.files?.[0])
                 event.target.value = ''
               }}
             />
+            {/* 手机党：DeepSeek 导出只给一个链接，浏览器里读不了（无 CORS），
+                这里帮他发起下载，省掉"复制到地址栏粘贴"那几步 */}
+            <div className={styles.linkBox}>
+              <div className={styles.linkTitle}>{t('blanketImportLinkTitle')}</div>
+              <div className={styles.linkRow}>
+                <input
+                  type="url"
+                  inputMode="url"
+                  className={styles.linkInput}
+                  value={link}
+                  placeholder={t('blanketImportLinkPlaceholder')}
+                  onChange={(event) => {
+                    setLink(event.target.value)
+                    setLinkError(null)
+                    setLinkSent(false)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      startDownload()
+                    }
+                  }}
+                />
+                <Button variant="outlined" size="s" disabled={!link.trim()} onClick={startDownload}>
+                  {t('blanketImportLinkAction')}
+                </Button>
+              </div>
+              {linkError ? <p className={styles.error}>{linkError}</p> : null}
+              <p className={linkSent ? styles.linkStarted : styles.linkHint}>
+                {linkSent ? t('blanketImportLinkStarted') : t('blanketImportLinkHint')}
+              </p>
+            </div>
             {error ? <p className={styles.error}>{error}</p> : null}
             <button type="button" className={styles.guideHint} onClick={openTutorial}>
               {t('guideStuckHint')}

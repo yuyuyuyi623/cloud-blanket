@@ -238,6 +238,14 @@ export const en = {
     'Upload the chat export from DeepSeek and turn it into a blanket here. The file is parsed on this device and never uploaded; only the distilling step calls your own API.',
   blanketImportDropHint: 'Drop the ZIP here, or click to choose a file',
   blanketImportDropFormats: 'Works with DeepSeek exports (deepseek_data-*.zip)',
+  blanketImportLinkTitle: 'On a phone? Paste the export link here',
+  blanketImportLinkPlaceholder: 'Paste the download link from the DeepSeek export page (https://…)',
+  blanketImportLinkAction: 'Download',
+  blanketImportLinkInvalid: 'That does not look like a link — it should start with https:// and be the full URL copied from the export page.',
+  blanketImportLinkHint:
+    'The browser downloads it for you (a few hundred MB on mobile, mostly images). When it finishes, tap "choose a file" above — the package you just downloaded is at the top of the list.',
+  blanketImportLinkStarted:
+    'Download started. When it finishes, tap "choose a file" above — the new package is at the top of the list (deepseek_data-*.zip).',
   scanErrCorrupt: 'This ZIP cannot be read — the download was probably incomplete. Download it again from your mailbox (keep the original name) and retry.',
   scanErrEncrypted: 'This ZIP is password-protected: official exports are never encrypted, so this is probably a different file.',
   scanErrNotZip: 'Not a chat-export ZIP: pick the package exported from the official DeepSeek app (deepseek_data-*.zip, keep the name).',

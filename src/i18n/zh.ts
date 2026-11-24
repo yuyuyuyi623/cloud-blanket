@@ -231,6 +231,14 @@ export const zh = {
     '传上 DeepSeek 导出的聊天记录包，在这里把它蒸成一床被子。文件只在本机解析，不会上传到任何服务器；只有蒸馏这一步会调用你自己的 API。',
   blanketImportDropHint: '把 ZIP 拖到这里，或点击选择文件',
   blanketImportDropFormats: '支持 DeepSeek 导出的数据包（deepseek_data-*.zip）',
+  blanketImportLinkTitle: '手机党：有导出链接就粘这里',
+  blanketImportLinkPlaceholder: '粘贴 DeepSeek 导出页给的下载链接（https:// 开头）',
+  blanketImportLinkAction: '下载',
+  blanketImportLinkInvalid: '链接不对：应该是 https:// 开头、完整的一串，从导出页「复制下载链接」拿到的那个',
+  blanketImportLinkHint:
+    '点下载后交给浏览器自己下（手机约 200 多 MB，大部分是图片），下完回到上面点「选择文件」——刚下的包就在文件列表最上面。',
+  blanketImportLinkStarted:
+    '已开始下载。下完回到这里点上面「选择文件」，刚下的包在列表最上面（文件名 deepseek_data-*.zip）。',
   scanErrCorrupt: '这个 ZIP 读不出来，多半是没下载完整：回邮箱重新下载一份，别改名再传',
   scanErrEncrypted: '这个 ZIP 带密码：官方导出的包不会加密，你选的可能是别的文件',
   scanErrNotZip: '这不是聊天记录的 ZIP 包：选 DeepSeek 官方 App 导出的那份（deepseek_data-*.zip，别改名）',

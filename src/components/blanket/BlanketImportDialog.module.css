@@ -398,3 +398,57 @@
   color: var(--dsw-alias-label-primary);
   text-decoration: underline;
 }
+
+/* ── 粘贴导出链接（手机党：只发起原生下载，不读内容） ── */
+
+.linkBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cb-card-border);
+}
+
+.linkTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.linkRow {
+  display: flex;
+  gap: 8px;
+}
+
+.linkInput {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 10px;
+  background: var(--cb-card-bg);
+  color: var(--cb-card-title);
+  font: inherit;
+  font-size: 12px;
+}
+
+.linkInput:focus {
+  outline: none;
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.linkHint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.linkStarted {
+  margin: 0;
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--dsw-alias-brand-primary);
+}
