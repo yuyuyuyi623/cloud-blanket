@@ -14,6 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@tencent-ai/workbuddy-cloud-sdk": "0.1.4-dev.71e5d1e.202611161655",
     "@types/katex": "^0.16.5",
     "@types/mdast": "~4.0.3",
     "@types/prismjs": "^1.26.1",

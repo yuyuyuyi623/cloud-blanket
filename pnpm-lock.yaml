@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@tencent-ai/workbuddy-cloud-sdk':
+        specifier: 0.1.4-dev.71e5d1e.202611161655
+        version: 0.1.4-dev.71e5d1e.202611161655
       '@types/katex':
         specifier: ^0.16.5
         version: 0.16.8
@@ -783,6 +786,10 @@ packages:
 
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
+
+  '@tencent-ai/workbuddy-cloud-sdk@0.1.4-dev.71e5d1e.202611161655':
+    resolution: {integrity: sha512-HYIlwOKVxkZlqUDnBAqWVpCkUZJCYXxnb2bfUn9I2JfH90SHHKcosRZJKskj05zNPz4+f1t1zdeCEIWEiPAJYw==}
+    engines: {node: '>=18'}
 
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
@@ -2321,6 +2328,8 @@ snapshots:
   '@swc/helpers@0.5.23':
     dependencies:
       tslib: 2.9.1
+
+  '@tencent-ai/workbuddy-cloud-sdk@0.1.4-dev.71e5d1e.202611161655': {}
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
