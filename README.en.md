@@ -10,7 +10,7 @@ Turn a DeepSeek chat export into a "blanket": a chat companion that carries some
 
 - **Distillation** — Import the ZIP exported from the official DeepSeek app, pick the conversations that really capture that person, and distill them (a few cents, about a minute) into structured memory: persona card, core memories, impressions, diary.
 - **Blanket mode** — Chat with the distilled persona. Each turn injects a stable segment (full persona memory, cache-friendly) plus a dynamic segment (topic-relevant memories retrieved by full-text search), so they remember how you met and what you talked about last week.
-- **Plain mode** — The upstream chat-demo experience, unchanged, metered and clearly priced. The two modes never interfere.
+- **Plain mode** — The upstream chat-demo experience, unchanged: plain chat billed at DeepSeek's official rates straight from your key (no per-message price shown in the UI; the platform dashboard is the source of truth). The two modes never interfere.
 - **Your own key** — All requests go straight from your browser to `api.deepseek.com`. The key lives only in your browser; no third-party server is involved.
 
 ## Getting started
