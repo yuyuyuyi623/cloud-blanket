@@ -90,6 +90,8 @@ export const createConfig = ({
         // PWA：manifest 与图标平铺进 dist 根（图标含 apple-touch-icon 180，iOS 加主屏用）
         { from: path.resolve(root, 'public/manifest.webmanifest'), to: 'manifest.webmanifest', toType: 'file' },
         { from: path.resolve(root, 'public/icons'), to: 'icons' },
+        // PWA 安装性：Android Chromium 要求站点有 SW 才肯出现"添加到主屏幕/安装"（sw.js 只放行不缓存）
+        { from: path.resolve(root, 'public/sw.js'), to: 'sw.js', toType: 'file' },
       ],
     }),
   ],
