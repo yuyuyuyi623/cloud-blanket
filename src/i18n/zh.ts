@@ -49,6 +49,8 @@ export const zh = {
   sessionTrashRestore: '恢复',
   sessionTrashPurge: '彻底删',
   sessionTrashRemaining: '{days} 天后自动清掉',
+  sessionTrashBlanketNote:
+    '另有 {count} 条被子对话不在这个列表里——它们跟着被子一起进「她的角落」的回收站，恢复那床被子，对话会自动回来。',
   sessionTrashedToast: '已进回收站，30 天内可在左下角找回',
   appName: '云朵被子',
   appAttribution: '基于官方 API 使用 demo 开发',

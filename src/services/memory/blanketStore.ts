@@ -81,9 +81,18 @@ export const restoreBlanket = async (id: string): Promise<void> => {
 
 /** 回收站里彻底删除（含原料会话），不可恢复 */
 export const purgeBlanket = async (id: string): Promise<void> => {
+  const current = useBlankets.getState().list.find((item) => item.id === id)
   await deleteBlanket(id)
   invalidateBlanket(id)
   await refreshBlankets()
+  // 彻底删 = 连对话也不留：否则普通回收站里会剩一条以被子命名的孤立对话
+  const { removeSession, useChatStore } = await import('../chat/store.js')
+  if (
+    current?.chatSessionId &&
+    useChatStore.getState().trashedSessions.some((session) => session.id === current.chatSessionId)
+  ) {
+    await removeSession(current.chatSessionId)
+  }
 }
 
 /** 手改记忆包（角色卡、核心记忆、事实、事件……）：确认页人工修的口子。

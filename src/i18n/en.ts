@@ -52,6 +52,8 @@ export const en = {
   sessionTrashRestore: 'Restore',
   sessionTrashPurge: 'Delete',
   sessionTrashRemaining: 'Auto-purged in {days} d',
+  sessionTrashBlanketNote:
+    '{count} blanket chat(s) are not listed here — they go to the trash in her corner together with the blanket. Restore the blanket and the chat comes back with it.',
   sessionTrashedToast: 'Moved to trash — recoverable for 30 days',
   appName: 'Cloud Blanket',
   appAttribution: 'Based on the official API usage demo',
