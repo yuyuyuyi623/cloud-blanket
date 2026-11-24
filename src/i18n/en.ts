@@ -243,11 +243,11 @@ export const en = {
   blanketImportLinkAction: 'Download',
   blanketImportLinkInvalid: 'That does not look like a link — it should start with https:// and be the full URL copied from the export page.',
   blanketImportLinkHint:
-    'The browser downloads it for you (a few hundred MB on mobile, mostly images). Pull down the notification shade to watch progress; when it finishes, tap "choose a file" above — the package sits in Internal storage / Download and is also at the top of the file list.',
+    'The browser downloads it for you (a few hundred MB on mobile, mostly images). Pull down the notification shade to watch progress; when it finishes, tap "choose a file" above — in the file picker, tap the ☰ menu at the top-left → Downloads, and the deepseek_data package is in there.',
   blanketImportLinkStarted:
-    'Handed to the browser. Pull down the notification shade to watch progress; when it finishes, tap "choose a file" above — it is in Internal storage / Download, also at the top of the list (deepseek_data-*.zip).',
+    'Handed to the browser. Pull down the notification shade to watch progress; when it finishes, tap "choose a file" above → tap ☰ at the top-left of the picker → Downloads → pick the package starting with deepseek_data (filter by "This week" if the list is long).',
   blanketImportShareHint:
-    'Once installed as an app there is an easier route: in the "download complete" notification (or long-press the zip in Files) tap Share → 云朵被子 and the package lands right here — no need to hunt for the file.',
+    'Once installed as an app, some devices also support a shortcut: in the "download complete" notification (or long-press the zip in Files) tap Share → 云朵被子 and the package lands right here. If your device does not offer it, the "choose a file" route above works just as well.',
   scanErrCorrupt: 'This ZIP cannot be read — the download was probably incomplete. Download it again from your mailbox (keep the original name) and retry.',
   scanErrEncrypted: 'This ZIP is password-protected: official exports are never encrypted, so this is probably a different file.',
   scanErrNotZip: 'Not a chat-export ZIP: pick the package exported from the official DeepSeek app (deepseek_data-*.zip, keep the name).',
