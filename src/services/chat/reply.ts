@@ -1,10 +1,11 @@
+import { toWireAction } from '../api/chatCompletions.js'
 import type {
-  AssistantBlockParam,
   FileBlockParam,
   MessageParam,
   MessageStreamEvent,
   OutputBlockStart,
-  TextBlockParam,
+  ServerToolCall,
+  ServerToolCallStep,
 } from '../api/types.js'
 import type {
   AssistantMessage,
@@ -131,6 +132,9 @@ export const applyEvent = (
         stopDetails: event.delta.stop_details,
         usage: event.usage ?? next.usage,
       }
+    case 'raw_server_tool_calls':
+      // 本轮完整的服务端工具调用（含流式事件不带走的 signature），回传时原样重发
+      return { ...next, serverToolCalls: event.calls }
     default:
       return next
   }
@@ -213,73 +217,114 @@ const toUserParam = ({ content, files }: UserMessage): MessageParam => {
 }
 
 /**
- * assistant 的内容块按历史与续写场景转换：
- * - 历史思考及其签名不回传；开启思考时续写只保留本轮非空白思考及其签名；
- * - 文本块去掉 citations（服务端忽略）。相邻文本直接拼接，被思考或工具隔开的文本用空行连接；
- *   省略历史思考后仍保留其前后正文的空行；
- * - 工具调用和结果只保留 kind 为 read_link 的块，其他历史工具块不回传；
- * - 阅读链接结果原样回传，保留 signature：服务端解密后将页面拼回该轮提问末尾；
+ * 旧数据（anthropic 端点时期）的回复没有 serverToolCalls 快照；从内容块重建，
+ * 让历史轮里阅读过的网页（靠 signature）不丢上下文。每步一个调用，步思考无法还原留空。
  */
-const toAssistantParam = (
-  { blocks }: AssistantMessage,
-  prefix = false,
-  thinking = false
-): Extract<MessageParam, { role: 'assistant' }> => {
-  const content: AssistantBlockParam[] = []
-  // 成功阅读的网页靠签名恢复正文；缺少有效签名时，调用与结果都不回传。
-  const unsignedReadLinks = new Set(
+const serverToolCallsFromBlocks = (blocks: ReplyBlock[]): ServerToolCallStep[] => {
+  const results = new Map(
     blocks.flatMap((block) =>
-      block.type === 'web_fetch_tool_result' &&
-      block.kind === 'read_link' &&
-      block.content.type === 'web_fetch_result' &&
-      !block.signature?.trim()
-        ? [block.tool_use_id]
+      block.type === 'web_search_tool_result' || block.type === 'web_fetch_tool_result'
+        ? [[block.tool_use_id, block]]
         : []
     )
   )
-  /** 正在拼接的文本块；遇到任何非文本块（含不回传的思考块）就结束 */
-  let text: TextBlockParam | null = null
+  const steps: ServerToolCallStep[] = []
   for (const block of blocks) {
-    // 空思考不改变续写位置，也不应把两段正文隔开，导致后端额外插入空行。
-    if (prefix && block.type === 'thinking' && !block.thinking.trim()) {
+    if (block.type !== 'server_tool_use') {
       continue
     }
-    if (block.type === 'text') {
-      if (text) {
-        text.text += block.text
-      } else {
-        const previous = content.at(-1)
-        text = {
-          type: 'text',
-          text: `${previous?.type === 'text' ? '\n\n' : ''}${block.text}`,
-        }
-        content.push(text)
+    const result = results.get(block.id)
+    let call: ServerToolCall
+    if (result?.type === 'web_search_tool_result') {
+      const error = result.content.find((item) => item.type === 'web_search_tool_result_error')
+      call = {
+        index: 0,
+        id: block.id,
+        type: block.name,
+        kind: block.kind,
+        action: toWireAction(block.input),
+        status: error ? 'failed' : 'completed',
+        ...(error
+          ? { error: { code: 'unavailable' } }
+          : {
+              sources: result.content.flatMap((item) =>
+                item.type === 'web_search_result'
+                  ? [
+                      {
+                        type: 'url' as const,
+                        url: item.url,
+                        title: item.title,
+                        snippet: item.snippet,
+                        site_name: item.site_name,
+                        site_icon: item.site_icon,
+                        published_at: item.page_age,
+                        ...(item.image_url ? { image_url: item.image_url } : {}),
+                      },
+                    ]
+                  : []
+              ),
+            }),
       }
+    } else if (result?.type === 'web_fetch_tool_result') {
+      call = {
+        index: 0,
+        id: block.id,
+        type: block.name,
+        kind: block.kind,
+        action: toWireAction(block.input),
+        status: result.content.type === 'web_fetch_tool_result_error' ? 'failed' : 'completed',
+        ...(result.content.type === 'web_fetch_tool_result_error'
+          ? { error: { code: result.content.error_code } }
+          : {
+              page: {
+                url: result.content.url,
+                title: result.content.content.title,
+                published_at: result.content.published_at,
+              },
+              ...(result.signature?.trim() ? { signature: result.signature } : {}),
+            }),
+      }
+    } else {
+      // 只有调用没有结果：按未完成处理
+      call = {
+        index: 0,
+        id: block.id,
+        type: block.name,
+        kind: block.kind,
+        action: toWireAction(block.input),
+        status: 'failed',
+        error: { code: 'unavailable' },
+      }
+    }
+    steps.push({ index: steps.length, reasoning_content: '', calls: [call] })
+  }
+  return steps
+}
+
+/**
+ * assistant 历史轮转换（OpenAI 线格式）：文本块相邻直接拼接、被思考或工具隔开的用空行连接；
+ * 历史思考不回传（线格式没有思考块）；工具调用回传原样 server_tool_calls。
+ */
+const toAssistantParam = (
+  { blocks, serverToolCalls }: AssistantMessage,
+  prefix = false
+): Extract<MessageParam, { role: 'assistant' }> => {
+  let content = ''
+  let previousWasText = false
+  for (const block of blocks) {
+    if (block.type === 'text') {
+      content += previousWasText ? block.text : `${content ? '\n\n' : ''}${block.text}`
+      previousWasText = true
       continue
     }
-    text = null
-    if (prefix && thinking && block.type === 'thinking') {
-      // 续写保留本轮思考，历史轮次的思考省略。
-      const { type, thinking, signature } = block
-      content.push({ type, thinking, signature: signature ?? '' })
-    } else if (
-      block.type === 'server_tool_use' &&
-      block.kind === 'read_link' &&
-      !unsignedReadLinks.has(block.id)
-    ) {
-      const { type, id, name, input, kind } = block
-      content.push({ type, id, name, input, kind })
-    } else if (
-      block.type === 'web_fetch_tool_result' &&
-      block.kind === 'read_link' &&
-      !unsignedReadLinks.has(block.tool_use_id)
-    ) {
-      content.push(block)
-    }
+    previousWasText = false
   }
+  const calls = serverToolCalls ?? serverToolCallsFromBlocks(blocks)
   return {
     role: 'assistant',
-    content: content.filter((block) => block.type !== 'text' || block.text !== ''),
+    content,
+    ...(calls.length ? { server_tool_calls: calls } : {}),
+    ...(prefix ? { prefix: true as const } : {}),
   }
 }
 
@@ -298,13 +343,12 @@ export const getContextRounds = (history: Message[]): [UserMessage, AssistantMes
 
 /**
  * 把会话转成请求的 messages：只保留「提问 + 有回答的回复」成对的轮次，最后接上本轮提问。
- * 失败或没有回答的轮次不进上下文。续写时末尾再带上本轮 assistant。
+ * 失败或没有回答的轮次不进上下文。续写时末尾再带上本轮 assistant（带 prefix 标记）。
  */
 export const toRequestMessages = (
   history: Message[],
   question: UserMessage,
   prefix?: AssistantMessage,
-  thinking = prefix?.thinking ?? false,
   latestReminder?: string
 ): MessageParam[] => {
   const messages: MessageParam[] = []
@@ -327,15 +371,9 @@ export const toRequestMessages = (
   appendReminder(latestReminder)
   messages.push(toUserParam(question))
   if (prefix?.prefix) {
-    const assistant = toAssistantParam(prefix, true, thinking)
-    // 没有非空白正文或有效思考时直接重发原问题，避免服务端拒绝空 Prefill。
-    if (
-      assistant.content.some(
-        (block) =>
-          (block.type === 'text' && block.text.trim()) ||
-          (block.type === 'thinking' && block.thinking.trim())
-      )
-    ) {
+    const assistant = toAssistantParam(prefix, true)
+    // 没有非空白正文时直接重发原问题，避免服务端拒绝空前缀。
+    if (assistant.content.trim()) {
       messages.push(assistant)
     }
   }

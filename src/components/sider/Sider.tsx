@@ -1,29 +1,39 @@
 import clsx from 'clsx'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
-import { IconPanelLeftOutline16, IconSettingsOutline16, NewChatIcon } from '../base/icons.js'
+import {
+  IconPanelLeftOutline16,
+  IconSettingsOutline16,
+  IconTrashOutline16,
+  IconUploadOutline14,
+  NewChatIcon,
+} from '../base/icons.js'
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
-import { newChat, removeSession, useChatStore } from '../../services/chat/store.js'
-import type { SessionSummary } from '../../services/chat/types.js'
-import { Button } from '../base/Button.js'
+import {
+  newChat,
+  trashSession,
+  useChatStore,
+} from '../../services/chat/store.js'
+import { openBlanketImport } from '../../services/memory/importState.js'
+import { BlanketList } from '../blanket/BlanketList.js'
 import { IconButton } from '../base/IconButton.js'
-import { Modal } from '../base/Modal.js'
 import { showToast } from '../base/toastState.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { closeMobileSider, useMobileSider } from './mobileSiderState.js'
 import { SessionItem } from './SessionItem.js'
+import { SessionTrashDialog } from './SessionTrashDialog.js'
 import styles from './Sider.module.css'
 
 /** 展开的侧边栏：名称与收起按钮、开启新对话、按时间分组的会话列表、底部设置；移动端放在抽屉里，收起按钮关闭抽屉 */
 export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const t = useTranslate()
   const sessions = useChatStore((state) => state.sessions)
+  const trashedCount = useChatStore((state) => state.trashedSessions.length)
   const activeId = useChatStore((state) => state.activeId)
   const [now, setNow] = useState(Date.now)
   const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
-  const [deleting, setDeleting] = useState<SessionSummary | null>(null)
-  const [deletePending, setDeletePending] = useState(false)
+  const [trashOpen, setTrashOpen] = useState(false)
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>
@@ -52,7 +62,17 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   return (
     <div className={clsx(styles.sider, mobile && styles.mobile)}>
       <div className={styles.top}>
-        <div className={styles.appName}>{t('appName')}</div>
+        <div className={styles.branding}>
+          <div className={styles.appName}>{t('appName')}</div>
+          <a
+            className={styles.appAttribution}
+            href="https://github.com/deepseek-ai/chat-demo"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('appAttribution')}
+          </a>
+        </div>
         <IconButton
           size="m"
           icon={<IconPanelLeftOutline16 />}
@@ -74,8 +94,20 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         </span>
         {t('newChat')}
       </button>
+      <button
+        type="button"
+        className={styles.importEntry}
+        onClick={() => {
+          openBlanketImport()
+          closeMobileSider()
+        }}
+      >
+        <IconUploadOutline14 />
+        {t('entryBlanketTitle')}
+      </button>
       <div className={styles.listWrap}>
         <div className={styles.list}>
+          <BlanketList />
           {groups.map((group) => (
             <div key={group.key} className={styles.section}>
               <div className={styles.sectionHeader}>{group.label}</div>
@@ -84,7 +116,16 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
                   key={session.id}
                   session={session}
                   active={session.id === activeId}
-                  onDelete={() => setDeleting(session)}
+                  onDelete={() => {
+                    // 软删进回收站：不用确认框拦截，30 天内随时可找回
+                    void trashSession(session.id).then((ok) => {
+                      if (ok) {
+                        showToast(t('sessionTrashedToast'))
+                      } else {
+                        showToast({ key: 'sessionDeleteFailed', type: 'error' })
+                      }
+                    })
+                  }}
                 />
               ))}
             </div>
@@ -92,6 +133,15 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         </div>
       </div>
       <div className={styles.bottom}>
+        <button type="button" className={styles.settings} onClick={() => setTrashOpen(true)}>
+          <span className={styles.settingsIcon}>
+            <IconTrashOutline16 />
+          </span>
+          <span className={styles.settingsLabel}>
+            {t('sessionTrashTitle')}
+            {trashedCount ? ` (${trashedCount})` : ''}
+          </span>
+        </button>
         <button type="button" className={styles.settings} onClick={() => openSettings('general')}>
           <span className={styles.settingsIcon}>
             <IconSettingsOutline16 />
@@ -99,43 +149,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           <span className={styles.settingsLabel}>{t('settings')}</span>
         </button>
       </div>
-      {deleting ? (
-        <Modal
-          title={t('deleteSessionModalContentTitle')}
-          onClose={() => {
-            if (!deletePending) {
-              setDeleting(null)
-            }
-          }}
-          footer={
-            <>
-              <Button variant="outlined" disabled={deletePending} onClick={() => setDeleting(null)}>
-                {t('cancel')}
-              </Button>
-              <Button
-                variant="danger"
-                disabled={deletePending}
-                onClick={async () => {
-                  setDeletePending(true)
-                  try {
-                    if (await removeSession(deleting.id)) {
-                      setDeleting(null)
-                    } else {
-                      showToast({ key: 'sessionDeleteFailed', type: 'error' })
-                    }
-                  } finally {
-                    setDeletePending(false)
-                  }
-                }}
-              >
-                {t('delete')}
-              </Button>
-            </>
-          }
-        >
-          {t('deleteSessionWithFilesDescription')}
-        </Modal>
-      ) : null}
+      {trashOpen ? <SessionTrashDialog onClose={() => setTrashOpen(false)} /> : null}
     </div>
   )
 }

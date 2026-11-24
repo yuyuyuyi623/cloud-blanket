@@ -20,11 +20,13 @@ import { useChatStore } from '../../services/chat/store.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
   isChineseBrowser,
+  setBlanketStyle,
   setLocale,
   setLocation,
   setThemePreference,
   setTtsVoice,
   useSettings,
+  type BlanketStyle,
   type ThemePreference,
 } from '../../services/settings.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
@@ -97,6 +99,7 @@ const SettingsContent = () => {
           {section === 'general' ? (
             <>
               <ThemeSetting />
+              <BlanketStyleSetting />
               <LocaleSetting />
               <TtsVoiceSetting />
               <LocationSetting />
@@ -383,6 +386,52 @@ const ThemeSetting = () => {
               themePreference === option.value && styles.themeOptionSelected
             )}
             onClick={() => setThemePreference(option.value)}
+          >
+            {option.icon}
+            {t(option.label)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+const blanketStyleOptions: { value: BlanketStyle; label: TranslationKey; icon: ReactNode }[] = [
+  {
+    value: 'warm',
+    label: 'interfaceStyleWarmOption',
+    icon: <IconLightOutline16 />,
+  },
+  {
+    value: 'plain',
+    label: 'interfaceStylePlainOption',
+    icon: <IconFollowsystemOutline16 />,
+  },
+]
+
+/**
+ * 界面风格项：云朵暖色（默认米黄整体暖调）/ 官方原样（全中性色）。
+ * 排在主题项之后，复用主题项的选块样式。
+ */
+const BlanketStyleSetting = () => {
+  const t = useTranslate()
+  const blanketStyle = useSettings((state) => state.blanketStyle)
+  const label = t('interfaceStyleItemLabel')
+  return (
+    <div className={styles.theme}>
+      {label}
+      <div role="radiogroup" aria-label={label} className={styles.themeOptions}>
+        {blanketStyleOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={blanketStyle === option.value}
+            className={clsx(
+              styles.themeOption,
+              blanketStyle === option.value && styles.themeOptionSelected
+            )}
+            onClick={() => setBlanketStyle(option.value)}
           >
             {option.icon}
             {t(option.label)}

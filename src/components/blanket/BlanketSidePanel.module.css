@@ -1,0 +1,255 @@
+/* 右上角的入口按钮：模仿左上角那对圆角 pill 图标按钮的手感 */
+.trigger {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 999px;
+  background: var(--cb-card-bg);
+  color: var(--cb-card-title);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.trigger:hover {
+  background: var(--cb-card-bg-hover);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 940;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+/* 右侧滑出的窄抽屉 */
+.panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 945;
+  box-sizing: border-box;
+  width: 240px;
+  padding: 18px 14px;
+  overflow-y: auto;
+  background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-layer-1));
+  border-left: 1px solid var(--dsw-alias-border-inverted);
+  animation: panelIn 0.18s ease;
+}
+
+@keyframes panelIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.panelTitle {
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.panelBlanket {
+  margin-bottom: 10px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cb-card-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panelEmpty {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 11px;
+  background: var(--cb-card-bg);
+  color: var(--cb-card-title);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.entry:hover {
+  background: var(--cb-card-bg-hover);
+}
+
+.entry svg {
+  flex-shrink: 0;
+  color: var(--cb-card-desc);
+}
+
+.entryName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 日记的日期与正文（弹窗复用 BlanketList 的容器样式） */
+.diaryEntry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-inverted);
+}
+
+.diaryDate {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.diaryText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 21px;
+  white-space: pre-wrap;
+  color: var(--cb-card-title);
+}
+
+/* ── 回收站 ───────────────────────────────────── */
+
+.trashTitle {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--cb-card-border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.trashRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.trashMain {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.trashName {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.trashMeta {
+  font-size: 10px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.trashActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.trashBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.trashBtn:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.trashBtnDanger {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--dsw-alias-status-danger);
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.trashBtnDanger:hover {
+  opacity: 1;
+}
+
+/* ── 界面风格一键切换 ─────────────────────────────── */
+
+.styleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid var(--cb-card-border);
+}
+
+.styleLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.styleSwitch {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 9px;
+  background: var(--cb-card-bg);
+}
+
+.styleOption {
+  border: none;
+  background: none;
+  padding: 4px 9px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.styleOption:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.styleOptionActive {
+  background: var(--cb-card-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}

@@ -1,8 +1,11 @@
 import { create } from 'zustand'
 import { createId } from '../../utils/id.js'
-import { ApiError, streamMessage } from '../api/client.js'
+import { ApiError } from '../api/client.js'
+// 聊天请求走 OpenAI 兼容端点（缓存收益所在），实现与 Files API（仍在 anthropic 兼容端点）分开
+import { streamChatCompletion as streamMessage } from '../api/chatCompletions.js'
 import type { ChatModel, CreateMessageRequest } from '../api/types.js'
 import { extractFileIds, getFileErrorCode, isRetryableApiError } from '../api/errors.js'
+import { recordError } from '../diagnostics/errorLog.js'
 import {
   cancelUpload,
   checkImageFileIds,
@@ -11,6 +14,13 @@ import {
   useUploads,
 } from '../attachments.js'
 import { useSettings } from '../settings.js'
+import { buildStableSegment } from '../../../engine/context.js'
+import {
+  blanketOfSession,
+  refreshBlankets,
+  useBlankets,
+} from '../memory/blanketStore.js'
+import { getBlanketMemory, syncChatSession } from '../memory/load.js'
 import { appendBranch, getVisibleMessages, normalizeSession, selectVersion } from './branches.js'
 import * as db from './db.js'
 import {
@@ -40,6 +50,10 @@ import {
 
 /** deepseek-flash 同时支持深度思考与图片输入 */
 const MODEL: ChatModel = 'deepseek-flash'
+/**
+ * 被子模式入口的待绑定被子 id：从被子点"开始聊天"而还没有对话框时先记下被子，
+ * 第一句话创建的会话再绑回去。用户中途点开别的会话视为放弃（selectSession 里解除）。 */
+let pendingBlanketId: string | null = null
 /** 所有生成请求统一携带的助手身份说明 */
 const SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
@@ -72,6 +86,8 @@ type ChatState = {
   importingHistory: boolean
   /** 仅列表元数据，按 updatedAt 降序；流式消息更新不会改变此数组。 */
   sessions: SessionSummary[]
+  /** 普通回收站：软删的会话，30 天后启动时自动彻底删除。 */
+  trashedSessions: SessionSummary[]
   sessionCache: Record<string, Session>
   sessionLoadErrors: Record<string, boolean>
   sessionSaveErrors: Record<string, boolean>
@@ -86,6 +102,7 @@ export const useChatStore = create<ChatState>(() => ({
   initError: false,
   importingHistory: false,
   sessions: [],
+  trashedSessions: [],
   sessionCache: {},
   sessionLoadErrors: {},
   sessionSaveErrors: {},
@@ -97,6 +114,13 @@ const { getState: get, setState: set } = useChatStore
 
 const sortSessions = (sessions: SessionSummary[]) =>
   [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
+
+/** 普通回收站保留天数（与被子回收站同款口径），到期启动时自动彻底删除 */
+export const SESSION_TRASH_DAYS = 30
+
+const SESSION_TRASH_MS = SESSION_TRASH_DAYS * 24 * 60 * 60 * 1000
+
+const isTrashed = (session: SessionSummary) => session.trashedAt !== undefined
 
 const getSession = (id: string) => {
   const cache = get().sessionCache
@@ -305,9 +329,21 @@ export const initChat = (): Promise<void> => {
   set({ initError: false })
   initTask = (async () => {
     try {
-      const summaries = await db.loadSessionSummaries()
+      const all = await db.loadSessionSummaries()
       if (epoch === historyEpoch) {
-        set({ ready: true, sessions: sortSessions(summaries) })
+        // 到期的回收站会话就地彻底删除（原件一起清），不用等用户再点一次
+        const expired = all.filter(
+          (session) => session.trashedAt !== undefined && Date.now() - session.trashedAt >= SESSION_TRASH_MS
+        )
+        for (const session of expired) {
+          await db.deleteSession(session.id).catch(db.reportStorageError('purge expired session'))
+        }
+        const rest = expired.length ? all.filter((session) => !expired.includes(session)) : all
+        set({
+          ready: true,
+          sessions: sortSessions(rest.filter((session) => !isTrashed(session))),
+          trashedSessions: sortSessions(rest.filter(isTrashed)),
+        })
       }
     } catch (error) {
       if (epoch === historyEpoch) {
@@ -427,6 +463,8 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
       ready: true,
       initError: false,
       sessions: sortSessions(summaries),
+      // 历史替换是整体换血：回收站也跟着清空（旧原件已在替换事务中丢弃）
+      trashedSessions: [],
       sessionCache: {},
       sessionLoadErrors: {},
       sessionSaveErrors: {},
@@ -446,6 +484,39 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
   }
 }
 
+/**
+ * 把刚创建的会话绑回被子：标题直接用被子名（自动起名就不抢了），
+ * 会话 id 写进被子记录——之后这个会话里的每一轮都走被子模式（稳定段 + 动态段检索）。 */
+const bindBlanketChat = async (sessionId: string): Promise<void> => {
+  const blanketId = pendingBlanketId
+  pendingBlanketId = null
+  if (!blanketId || sessionId === null) {
+    return
+  }
+  const record = useBlankets.getState().list.find((item) => item.id === blanketId)
+  if (!record) {
+    return
+  }
+  /** 绑定后的完整记录 */
+  const bound = { ...record, chatSessionId: sessionId }
+  // 先同步改内存列表再落库：streamReply 紧跟着就跑，等IndexedDB写完+列表刷新回来它就查不到
+  // 被子了，第一轮会悄悄退回普通模式（实测踩过：第一句没有记忆，第二句才有）。
+  useBlankets.setState((state) => ({
+    list: state.list.map((item) => (item.id === blanketId ? bound : item)),
+  }))
+  updateSession(sessionId, (session) =>
+    session.title ? session : { ...session, title: record.name }
+  )
+  persist(sessionId)
+  await db.saveBlanket(bound)
+  await refreshBlankets()
+}
+
+/** 从被子入口进入聊天：先记下被子，再开一个新对话框等第一句话 */
+export const armBlanketChat = (blanketId: string): void => {
+  pendingBlanketId = blanketId
+}
+
 export const newChat = () => {
   if (!get().importingHistory) {
     set({ activeId: null })
@@ -455,6 +526,8 @@ export const newChat = () => {
 
 export const selectSession = (id: string) => {
   if (!get().importingHistory && get().sessions.some((session) => session.id === id)) {
+    // 点开别的会话说明放弃了"从被子开始聊"的入口，别把下一句话误绑到被子上
+    pendingBlanketId = null
     touchSession(id)
     set({ activeId: id })
     void ensureSessionLoaded(id)
@@ -493,6 +566,85 @@ export const removeSession = (id: string): Promise<boolean> => {
   return task
 }
 
+/**
+ * 删进普通回收站（软删）：原件不动，30 天内可恢复，到期启动时自动彻底删除。
+ * 删被子联动也走这里（blanketStore 动态 import，避免循环引用）。
+ */
+export const trashSession = (id: string): Promise<boolean> => {
+  const task = trashSessionData(id).finally(() => deletionTasks.delete(task))
+  deletionTasks.add(task)
+  return task
+}
+
+const trashSessionData = async (id: string): Promise<boolean> => {
+  if (get().importingHistory || deletingSessions.has(id)) {
+    return false
+  }
+  const epoch = historyEpoch
+  deletingSessions.add(id)
+  try {
+    getStreamController(id)?.abort()
+    // 等本会话的流收尾，避免删除之后又被收尾保存写回来。
+    await waitForIdle(id)
+    if (epoch !== historyEpoch) {
+      return false
+    }
+    const now = Date.now()
+    await db.setSessionTrashed(id, now)
+    if (epoch !== historyEpoch) {
+      return true
+    }
+    const known = get().sessions.find((session) => session.id === id)
+    const trashed: SessionSummary = known
+      ? { ...known, trashedAt: now }
+      : { id, title: '', createdAt: now, updatedAt: now, trashedAt: now }
+    sessionAccess.delete(id)
+    unsavedSessions.delete(id)
+    pendingFiles.delete(id)
+    clearDraft(id)
+    set((state) => ({
+      sessions: state.sessions.filter((session) => session.id !== id),
+      trashedSessions: sortSessions([
+        ...state.trashedSessions.filter((session) => session.id !== id),
+        trashed,
+      ]),
+      sessionCache: Object.fromEntries(
+        Object.entries(state.sessionCache).filter(([key]) => key !== id)
+      ),
+      sessionLoadErrors: Object.fromEntries(
+        Object.entries(state.sessionLoadErrors).filter(([key]) => key !== id)
+      ),
+      sessionSaveErrors: Object.fromEntries(
+        Object.entries(state.sessionSaveErrors).filter(([key]) => key !== id)
+      ),
+      activeId: state.activeId === id ? null : state.activeId,
+    }))
+    return true
+  } finally {
+    deletingSessions.delete(id)
+    // 删除失败时保留会话；软删本身不需要额外落盘。
+  }
+}
+
+/** 从普通回收站捞回来：清 trashedAt，会话回到原列表。 */
+export const restoreSession = async (id: string): Promise<void> => {
+  const summary = get().trashedSessions.find((session) => session.id === id)
+  if (!summary) {
+    return
+  }
+  await db.setSessionTrashed(id, undefined)
+  const restored: SessionSummary = {
+    id: summary.id,
+    title: summary.title,
+    createdAt: summary.createdAt,
+    updatedAt: summary.updatedAt,
+  }
+  set((state) => ({
+    trashedSessions: state.trashedSessions.filter((session) => session.id !== id),
+    sessions: sortSessions([restored, ...state.sessions]),
+  }))
+}
+
 const removeSessionData = async (id: string): Promise<boolean> => {
   if (get().importingHistory || deletingSessions.has(id)) {
     return false
@@ -517,6 +669,7 @@ const removeSessionData = async (id: string): Promise<boolean> => {
     clearDraft(id)
     set((state) => ({
       sessions: state.sessions.filter((session) => session.id !== id),
+      trashedSessions: state.trashedSessions.filter((session) => session.id !== id),
       sessionCache: Object.fromEntries(
         Object.entries(state.sessionCache).filter(([key]) => key !== id)
       ),
@@ -584,6 +737,8 @@ export const sendMessage = (targetSessionId: string | null) => {
       sessionCache: { ...state.sessionCache, [session.id]: session },
       activeId: session.id,
     }))
+    // 从被子入口发的第一句话：把新会话绑回被子（同步段先设标题，标题请求就不会抢）
+    void bindBlanketChat(sessionId)
   }
   const current = getSession(sessionId)
   if (!current) {
@@ -989,6 +1144,10 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     titleRequests.add(controller)
   }
   set((state) => ({ streaming: { ...state.streaming, [sessionId]: controller } }))
+  // 被子模式：会话绑在某床被子上 → 稳定段换成蒸出来的记忆包，动态段每轮按提问现算。
+  // 装配失败（被子被删、原料损坏）就退回普通模式，聊天不该因为记忆层挂掉而发不出去。
+  const blanket = blanketOfSession(sessionId)
+  const blanketMemory = blanket ? await getBlanketMemory(blanket.id) : undefined
   let reply = initial
   let frame = 0
   const flush = () => {
@@ -1017,14 +1176,21 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           prepared.history,
           prepared.question,
           prepared.prefix,
-          initial.thinking ?? false,
           latestReminder
         )
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',
           {
             model: initial.model ?? MODEL,
-            system: SYSTEM_PROMPT,
+            system: blanketMemory
+              ? buildStableSegment(blanketMemory.record.pack)
+              : SYSTEM_PROMPT,
+            // 被子模式：动态段按本轮提问现算（engine 口径：永远是最后一条 system）
+            ...(blanketMemory
+              ? {
+                  systemSuffix: blanketMemory.memory.retrieve(prepared.question.content).dynamic,
+                }
+              : {}),
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             safety_check: SAFETY_CHECK,
@@ -1063,6 +1229,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           break
         }
         if (preparing) {
+          recordError('对话', error)
           reply = settleReply(reply, 'error', Date.now(), {
             kind: 'upload',
             message: '',
@@ -1088,6 +1255,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           // 已收到 message_delta 的结束原因，只是缺了结尾的 message_stop
           reply = settleReply(reply, 'done', Date.now())
         } else if (error instanceof ApiError) {
+          recordError('对话', error)
           reply = settleReply(reply, 'error', Date.now(), {
             kind: error.kind,
             message: error.message,
@@ -1095,6 +1263,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             localMessage: error.localMessage,
           })
         } else {
+          recordError('对话', error)
           reply = settleReply(reply, 'error', Date.now(), {
             kind: 'protocol',
             message: error instanceof Error ? error.message : String(error),
@@ -1114,5 +1283,12 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
       ),
     }))
     persist(sessionId)
+  }
+  // 聊完把这一轮同步进被子索引：聊出来的新内容几分钟后就要能被“你还记得刚内…”检索到
+  if (blanket && blanketMemory) {
+    const session = getSession(sessionId)
+    if (session) {
+      void syncChatSession(blanket.id, session)
+    }
   }
 }

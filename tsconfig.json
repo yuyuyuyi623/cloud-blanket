@@ -18,5 +18,5 @@
     "noImplicitReturns": true,
     "useUnknownInCatchVariables": true
   },
-  "include": ["src", "rspack.config.ts"]
+  "include": ["src", "engine", "tests", "rspack.config.ts", "vitest.config.ts"]
 }

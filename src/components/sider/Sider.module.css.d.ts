@@ -1,7 +1,9 @@
 declare const styles: {
   readonly "sider": string;
   readonly "top": string;
+  readonly "branding": string;
   readonly "appName": string;
+  readonly "appAttribution": string;
   readonly "newChat": string;
   readonly "newChatIcon": string;
   readonly "listWrap": string;

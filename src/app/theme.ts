@@ -50,6 +50,16 @@ const applyTheme = (theme: Theme) => {
   }, 0)
 }
 
+/** 界面风格同步：云朵暖色为默认；官方原样时打上 data-cb-plain，暖色变量全部还原 */
+const applyBlanketStyle = () => {
+  const plain = useSettings.getState().blanketStyle === 'plain'
+  if (plain) {
+    document.body.setAttribute('data-cb-plain', 'plain')
+  } else {
+    document.body.removeAttribute('data-cb-plain')
+  }
+}
+
 let appliedTheme: Theme | null = null
 
 const syncTheme = () => {
@@ -62,10 +72,12 @@ const syncTheme = () => {
 
 /** 首屏渲染前同步应用一次，之后随主题设置与系统深浅色变化更新 */
 export const setupTheme = () => {
+  applyBlanketStyle()
   syncTheme()
   if (document.readyState !== 'complete') {
     window.addEventListener('load', syncPageBackground, { once: true })
   }
   query.addEventListener('change', syncTheme)
   useSettings.subscribe(syncTheme)
+  useSettings.subscribe(applyBlanketStyle)
 }

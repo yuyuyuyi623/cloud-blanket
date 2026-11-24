@@ -1,0 +1,158 @@
+.entryCards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: 22px;
+}
+
+/* 卡片颜色全部走 --cb-* 变量：暖色主题（默认米黄）与官方原样都由 theme.css 统一提供 */
+.entryCard {
+  display: flex;
+  flex: 1 1 180px;
+  align-items: flex-start;
+  gap: 12px;
+  box-sizing: border-box;
+  max-width: 250px;
+  padding: 14px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 16px;
+  background: var(--cb-card-bg);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.entryCard:hover {
+  background: var(--cb-card-bg-hover);
+  transform: translateY(-1px);
+}
+
+.entryCard:active {
+  transform: translateY(0);
+}
+
+.entryIcon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: var(--cb-icon-bg);
+  color: var(--cb-icon-color);
+}
+
+.entryText {
+  display: block;
+  min-width: 0;
+}
+
+.entryTitle {
+  display: block;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--cb-card-title);
+}
+
+.entryDesc {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--cb-card-desc);
+}
+
+/* 新手指引入口：三张卡下面的一行小字链接 */
+/* 链接行镜像卡片的弹性参数：指引落在"先聊聊"下面，平台直链落在"从零开始"下面 */
+.linkRow {
+  display: flex;
+  gap: 14px;
+  width: 100%;
+  margin-top: 14px;
+}
+
+.linkSlot {
+  display: flex;
+  flex: 1 1 180px;
+  justify-content: center;
+  max-width: 250px;
+}
+
+.guideLink {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.guideLink:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+}
+
+/* ── 「随便聊聊」试玩浮层：候选问题 chips + 路标小字，渲染在输入框上方 ── */
+
+/* 透明背板：点别处收起浮层（盖满视口，位于浮层之下） */
+.playBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.playChips {
+  position: relative;
+  z-index: 41;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 12px;
+  animation: playChipsIn 0.15s ease;
+}
+
+@keyframes playChipsIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.playChip {
+  padding: 6px 14px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 999px;
+  background: var(--cb-card-bg);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--cb-card-title);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.playChip:hover {
+  background: var(--cb-card-bg-hover);
+}
+
+/* 路标小字：普通聊天计费 + 导向核心卖点「盖进被子」 */
+.playHint {
+  width: 100%;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}

@@ -1,8 +1,9 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import type { BlanketRecord } from '../memory/blanket.js'
 import { toSessionSummary, type Session, type SessionSummary } from './types.js'
 
 /** IndexedDB 存储结构版本；新增或调整存储、索引时递增。 */
-const DB_VERSION = 11
+const DB_VERSION = 13
 
 /** 文件原件按附件的本地 id 存储，所有引用同一 id 的消息共用一份；用于缩略图、打开查看，以及没有 serverId 时补传。 */
 export type StoredFile = {
@@ -12,6 +13,22 @@ export type StoredFile = {
 
 /** 文件引用留在摘要中，删除会话时通过索引判断原件是否仍被引用。 */
 type StoredSessionSummary = SessionSummary & { fileIds: string[] }
+
+/**
+ * 被子原料会话：蒸进被子的原始对话。
+ * 记忆检索要原文（pack 里只有摘要和事件），所以原文按被子单独存一份，
+ * 不写进 sessions——导入几百个会话不该淹没侧栏的普通对话列表。
+ */
+export type BlanketSessionRecord = {
+  /** `${blanketId}\u0000${sessionId}`，一床被子里的会话 */
+  id: string
+  blanketId: string
+  sessionId: string
+  session: Session
+}
+
+const blanketSessionKey = (blanketId: string, sessionId: string) =>
+  `${blanketId}\u0000${sessionId}`
 
 interface ChatDB extends DBSchema {
   /** 当前使用的会话，界面读写都在这里 */
@@ -29,6 +46,14 @@ interface ChatDB extends DBSchema {
    */
   sessionsStaging: { key: string; value: Session }
   filesStaging: { key: string; value: StoredFile }
+  /** 云朵被子：一床被子 = 一组会话 + 记忆包（v12 新增，与官方会话数据互不干扰） */
+  blankets: { key: string; value: BlanketRecord }
+  /** 被子原料会话（v13 新增）：记忆检索的原文来源，按被子分组 */
+  blanketSessions: {
+    key: string
+    value: BlanketSessionRecord
+    indexes: { blanketId: string }
+  }
 }
 
 let dbPromise: Promise<IDBPDatabase<ChatDB>> | null = null
@@ -57,7 +82,13 @@ const getDB = () =>
   (dbPromise ??= openDB<ChatDB>('chat-demo', DB_VERSION, {
     upgrade(db, _oldVersion, _newVersion, tx) {
       // 初始化当前格式需要的存储与索引，不迁移旧消息。
-      for (const name of ['sessions', 'files', 'sessionsStaging', 'filesStaging'] as const) {
+      for (const name of [
+        'sessions',
+        'files',
+        'sessionsStaging',
+        'filesStaging',
+        'blankets',
+      ] as const) {
         if (!db.objectStoreNames.contains(name)) {
           db.createObjectStore(name, { keyPath: 'id' })
         }
@@ -67,6 +98,12 @@ const getDB = () =>
         : db.createObjectStore('sessionSummaries', { keyPath: 'id' })
       if (!summaries.indexNames.contains('fileIds')) {
         summaries.createIndex('fileIds', 'fileIds', { multiEntry: true })
+      }
+      if (!db.objectStoreNames.contains('blanketSessions')) {
+        db.createObjectStore('blanketSessions', { keyPath: 'id' }).createIndex(
+          'blanketId',
+          'blanketId'
+        )
       }
     },
   }).catch((error: unknown) => {
@@ -124,6 +161,39 @@ export const renameSession = async (id: string, title: string): Promise<void> =>
 }
 
 /** 删除会话，仅清理已无会话引用的本地原件；远端文件不删。 */
+/**
+ * 软删/恢复：写或清 trashedAt，两条记录同步改；消息原件不动——
+ * 普通回收站 30 天内可恢复，到期由 store 启动清理时走 deleteSession 彻底删。
+ */
+export const setSessionTrashed = async (
+  sessionId: string,
+  trashedAt: number | undefined,
+): Promise<void> => {
+  const tx = (await getDB()).transaction(['sessions', 'sessionSummaries'], 'readwrite')
+  await Promise.all([
+    (async () => {
+      try {
+        for (const name of ['sessions', 'sessionSummaries'] as const) {
+          const store = tx.objectStore(name)
+          const record = await store.get(sessionId)
+          if (record) {
+            if (trashedAt === undefined) {
+              delete record.trashedAt
+            } else {
+              record.trashedAt = trashedAt
+            }
+            await store.put(record)
+          }
+        }
+      } catch (error) {
+        abortTransaction(tx)
+        throw error
+      }
+    })(),
+    tx.done,
+  ])
+}
+
 export const deleteSession = async (sessionId: string): Promise<void> => {
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')
   await Promise.all([
@@ -242,6 +312,73 @@ export const commitStaging = async (): Promise<SessionSummary[]> => {
   await Promise.all([move('sessionsStaging', 'sessions'), move('filesStaging', 'files'), tx.done])
   // 直接返回本次提交的列表，调用方无需在替换成功后再发起可能失败的读取。
   return summaries
+}
+
+// ── 云朵被子 ──────────────────────────────────────────────────
+
+/** 全部被子，最近更新的在前（侧栏"我的被子"分组用） */
+export const loadBlankets = async (): Promise<BlanketRecord[]> =>
+  (await (await getDB()).getAll('blankets')).sort((a, b) => b.updatedAt - a.updatedAt)
+
+export const loadBlanket = async (id: string): Promise<BlanketRecord | undefined> =>
+  (await getDB()).get('blankets', id)
+
+export const saveBlanket = async (blanket: BlanketRecord): Promise<void> => {
+  await (await getDB()).put('blankets', blanket)
+}
+
+/** 只删被子本身；被蒸的那些会话属于官方数据，由用户在会话列表里自己删 */
+export const deleteBlanket = async (id: string): Promise<void> => {
+  const db = await getDB()
+  const tx = db.transaction(['blankets', 'blanketSessions'], 'readwrite')
+  await Promise.all([
+    tx.objectStore('blankets').delete(id),
+    // 原料会话跟着被子一起走，不留孤儿
+    tx.objectStore('blanketSessions').delete(IDBKeyRange.bound(`${id}\u0000`, `${id}\u0000\uffff`)),
+    tx.done,
+  ])
+}
+
+/** 写入/覆盖一床被子的原料会话（重蒸时整组替换由调用方先清空） */
+export const saveBlanketSessions = async (
+  blanketId: string,
+  sessions: Session[]
+): Promise<void> => {
+  const db = await getDB()
+  const tx = db.transaction('blanketSessions', 'readwrite')
+  await Promise.all([
+    ...sessions.map((session) =>
+      tx.objectStore('blanketSessions').put({
+        id: blanketSessionKey(blanketId, session.id),
+        blanketId,
+        sessionId: session.id,
+        session,
+      })
+    ),
+    tx.done,
+  ])
+}
+
+export const loadBlanketSession = async (
+  blanketId: string,
+  sessionId: string
+): Promise<Session | undefined> =>
+  (await (await getDB()).get('blanketSessions', blanketSessionKey(blanketId, sessionId)))?.session
+
+/** 一床被子的全部原料会话（装索引时一次读齐，比逐个 get 快） */
+export const loadBlanketSessions = async (blanketId: string): Promise<Session[]> =>
+  (await (await getDB()).getAllFromIndex('blanketSessions', 'blanketId', blanketId)).map(
+    (record) => record.session
+  )
+
+/** 清空一床被子的原料会话（重蒸或换导出包时用） */
+export const clearBlanketSessions = async (blanketId: string): Promise<void> => {
+  const db = await getDB()
+  const tx = db.transaction('blanketSessions', 'readwrite')
+  await Promise.all([
+    tx.objectStore('blanketSessions').delete(IDBKeyRange.bound(`${blanketId}\u0000`, `${blanketId}\u0000\uffff`)),
+    tx.done,
+  ])
 }
 
 /** 本地存储失败不打断对话，只在控制台留痕 */

@@ -251,3 +251,113 @@ body {
 
   --dsw-font-xs-13: 13px/20px var(--dsw-font-family);
 }
+
+/*
+ * 云朵被子暖色主题：整体暖调（冬天被子的米黄/奶油色），默认启用。
+ * 设置里选「官方原样」时 body 打上 data-cb-plain，以下变量全部还原官方配色。
+ * 只覆盖 alias/specific 层的变量，不碰 static 层；暖色下官方蓝色强调同步换暖琥珀。
+ */
+body:not([data-cb-plain]) {
+  --dsw-alias-bg-base: #f8f3ea;
+  --dsw-alias-bg-layer-2: #f8f3ea;
+  --dsw-alias-bg-layer-3: #fbf7ef;
+  --dsw-alias-bg-skeleton: rgba(90, 70, 40, 0.06);
+  --dsw-alias-border-l1: rgba(120, 95, 55, 0.08);
+  --dsw-alias-border-l2: rgba(120, 95, 55, 0.14);
+  --dsw-alias-border-l3: rgba(120, 95, 55, 0.16);
+  --dsw-alias-brand-primary: #b9822a;
+  --dsw-alias-brand-primary-invert: #fffdf6;
+  --dsw-alias-brand-text: #9c6e1d;
+  --dsw-alias-button-primary-fill: #b9822a;
+  --dsw-alias-button-primary-hover: #a67424;
+  --dsw-alias-button-ghost-active-border: rgba(185, 130, 42, 0.4);
+  --dsw-alias-button-ghost-active-fill: rgba(185, 130, 42, 0.12);
+  --dsw-alias-button-ghost-active-hover: rgba(185, 130, 42, 0.18);
+  --dsw-alias-interactive-bg-active: rgba(120, 95, 55, 0.12);
+  --dsw-alias-interactive-bg-hover: rgba(120, 95, 55, 0.08);
+  --dsw-alias-interactive-bg-hover-accent: rgba(120, 95, 55, 0.16);
+  --dsw-alias-label-primary: #3d3324;
+  --dsw-alias-label-secondary: #6b5c42;
+  --dsw-alias-label-tertiary: #857354;
+  --dsw-alias-label-caption: #a2926f;
+  --dsw-alias-label-dimmed: #b8a986;
+  --dsw-alias-markdown-citation: rgba(201, 154, 75, 0.16);
+  --dsw-alias-markdown-code-block: #f3ecdd;
+  --dsw-alias-markdown-code-block-banner: #f3ecdd;
+  --dsw-alias-markdown-inline-code: #efe6d2;
+  --dsw-alias-toast-bg: #4a3b26;
+  --dsw-alias-tooltip-bg: #4a3b26;
+  --dsw-specific-bubble: rgba(201, 154, 75, 0.15);
+  --dsw-specific-input-major: #fffdf6;
+  --dsw-specific-login-input: #f3ecdd;
+  --dsw-specific-menu: #fbf7ef;
+  --dsw-specific-selector: rgba(120, 95, 55, 0.08);
+  --dsw-specific-sidebar-fill: #f1ebde;
+  --dsw-specific-sidebar-nav-item-active-accent: rgba(185, 130, 42, 0.22);
+  --dsw-specific-sidebar-nav-item-hover: rgba(120, 95, 55, 0.08);
+  --cb-card-bg: #faf3e7;
+  --cb-card-bg-hover: #f4ead4;
+  --cb-card-border: rgba(197, 163, 95, 0.3);
+  --cb-card-title: #4a3b26;
+  --cb-card-desc: #97815f;
+  --cb-icon-bg: rgba(201, 154, 75, 0.18);
+  --cb-icon-color: #a9792c;
+}
+
+body:not([data-cb-plain])[data-ds-dark-theme] {
+  --dsw-alias-bg-base: #1e1a15;
+  --dsw-alias-bg-layer-2: #262119;
+  --dsw-alias-bg-layer-3: #2c2620;
+  --dsw-alias-bg-skeleton: rgba(230, 200, 140, 0.07);
+  --dsw-alias-border-l1: rgba(230, 200, 140, 0.07);
+  --dsw-alias-border-l2: rgba(230, 200, 140, 0.12);
+  --dsw-alias-border-l3: rgba(230, 200, 140, 0.15);
+  --dsw-alias-brand-primary: #e0b15e;
+  --dsw-alias-brand-primary-invert: #1e1a15;
+  --dsw-alias-brand-text: #e0b15e;
+  --dsw-alias-button-primary-fill: #e0b15e;
+  --dsw-alias-button-primary-hover: #d0a350;
+  --dsw-alias-button-ghost-active-border: rgba(224, 177, 94, 0.4);
+  --dsw-alias-button-ghost-active-fill: rgba(224, 177, 94, 0.12);
+  --dsw-alias-button-ghost-active-hover: rgba(224, 177, 94, 0.18);
+  --dsw-alias-interactive-bg-active: rgba(230, 200, 140, 0.12);
+  --dsw-alias-interactive-bg-hover: rgba(230, 200, 140, 0.08);
+  --dsw-alias-interactive-bg-hover-accent: rgba(230, 200, 140, 0.16);
+  --dsw-alias-label-primary: #ede3ce;
+  --dsw-alias-label-secondary: #c9bba0;
+  --dsw-alias-label-tertiary: #a2967d;
+  --dsw-alias-label-caption: #8b7f66;
+  --dsw-alias-label-dimmed: #75694f;
+  --dsw-alias-markdown-citation: rgba(224, 177, 94, 0.12);
+  --dsw-alias-markdown-code-block: #2c2620;
+  --dsw-alias-markdown-code-block-banner: #2c2620;
+  --dsw-alias-markdown-inline-code: #322c24;
+  --dsw-alias-toast-bg: #3a332a;
+  --dsw-alias-tooltip-bg: #3a332a;
+  --dsw-specific-bubble: rgba(224, 177, 94, 0.12);
+  --dsw-specific-input-major: #2a251e;
+  --dsw-specific-login-input: #2c2620;
+  --dsw-specific-menu: #2c2620;
+  --dsw-specific-selector: rgba(230, 200, 140, 0.08);
+  --dsw-specific-sidebar-fill: #262119;
+  --dsw-specific-sidebar-nav-item-active-accent: rgba(224, 177, 94, 0.2);
+  --dsw-specific-sidebar-nav-item-hover: rgba(230, 200, 140, 0.08);
+  --cb-card-bg: #2c2822;
+  --cb-card-bg-hover: #38322a;
+  --cb-card-border: rgba(216, 183, 120, 0.22);
+  --cb-card-title: #e8dcc4;
+  --cb-card-desc: #a6977b;
+  --cb-icon-bg: rgba(216, 183, 120, 0.14);
+  --cb-icon-color: #d8b778;
+}
+
+/* 官方原样：入口卡片回官方中性风格（其余变量本来就没被覆盖） */
+body[data-cb-plain] {
+  --cb-card-bg: transparent;
+  --cb-card-bg-hover: var(--dsw-alias-interactive-bg-hover);
+  --cb-card-border: var(--dsw-alias-border-l2);
+  --cb-card-title: var(--dsw-alias-label-primary);
+  --cb-card-desc: var(--dsw-alias-label-tertiary);
+  --cb-icon-bg: var(--dsw-alias-bg-skeleton);
+  --cb-icon-color: var(--dsw-alias-label-secondary);
+}

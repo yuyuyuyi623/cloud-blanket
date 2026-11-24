@@ -1,0 +1,295 @@
+.section {
+  position: relative;
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding: 2px 10px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+  background-color: var(--dsw-specific-sidebar-fill);
+  user-select: none;
+}
+
+.itemRow {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.item {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 11px;
+  background: var(--cb-card-bg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.item:hover {
+  background: var(--cb-card-bg-hover);
+}
+
+/* 行尾的"看她的记忆"小按钮：窄一点，不跟聊天抢地方 */
+.itemMemory {
+  flex-shrink: 0;
+  width: 30px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 11px;
+  background: var(--cb-card-bg);
+  color: var(--cb-card-desc);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.itemMemory:hover {
+  background: var(--cb-card-bg-hover);
+  color: var(--cb-card-title);
+}
+
+.itemName {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--cb-card-title);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemMeta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--cb-card-desc);
+}
+
+/* ── 详情 ─────────────────────────────────────── */
+
+.detail {
+  width: 560px;
+  max-height: calc(100vh - 48px);
+  --modal-header-gap: 8px;
+}
+
+.detailMain {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.detailBody {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.detailMeta {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.impression {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--cb-card-bg);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--cb-card-title);
+}
+
+.sectionBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sectionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.personaCard {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--cb-card-bg);
+  font-size: 13px;
+  line-height: 20px;
+  white-space: pre-wrap;
+  color: var(--cb-card-title);
+}
+
+.sectionEmpty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.sectionList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sectionItem {
+  padding-left: 12px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+  text-indent: -12px;
+}
+
+.sectionItem::before {
+  content: '· ';
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.detailFooter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 4px;
+}
+
+.deleteLink {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 4px;
+  color: var(--dsw-alias-state-error-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.deleteLink:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.confirmBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--dsw-alias-interactive-bg-hover-danger);
+}
+
+.confirmText {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── 记忆编辑（确认页人工修的口子）────────────────────── */
+
+.editLink {
+  margin-top: 2px;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.editLink:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.editArea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-base);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--dsw-alias-label-primary);
+  resize: vertical;
+}
+
+.editActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.listRow {
+  padding: 2px 0;
+}
+
+.rowActions {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 10px;
+  margin-left: 8px;
+}
+
+.rowButton {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.rowButton:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.rowButtonDanger {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 11px;
+  color: var(--dsw-alias-status-danger);
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.rowButtonDanger:hover {
+  opacity: 1;
+}

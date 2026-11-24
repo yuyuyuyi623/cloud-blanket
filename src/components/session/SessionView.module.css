@@ -16,6 +16,7 @@
 }
 
 .title {
+  flex: 1;
   max-width: 480px;
   padding: 8px 12px;
   overflow: hidden;
@@ -23,6 +24,11 @@
   text-overflow: ellipsis;
   font: var(--dsw-font-s-strong-14);
   color: var(--dsw-alias-label-primary);
+}
+
+.headerButton {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .withCollapsedSider {

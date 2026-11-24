@@ -4,6 +4,7 @@ import type {
   ChatModel,
   MessageUsage,
   ServerToolBlock,
+  ServerToolCallStep,
   StopDetails,
   StopReason,
   TextCitation,
@@ -85,6 +86,11 @@ export type AssistantMessage = MessageBranch & {
   search?: boolean
   /** 本轮请求的系统信息快照；各回答版本独立保存，续写沿用。历史消息中缺省的快照保持为空。 */
   latestReminder?: string
+  /**
+   * 本轮请求的完整服务端工具调用（OpenAI 格式，含流式事件不带走的 signature），
+   * 多轮请求原样回传；旧数据（anthropic 端点时期）缺省，发送前从内容块重建。
+   */
+  serverToolCalls?: ServerToolCallStep[]
   /** 是否允许作为续写前缀；仍需满足回复状态与内容限制。 */
   prefix: boolean
   status: ReplyStatus
@@ -116,10 +122,15 @@ export type Session = {
   messages: Message[]
   /** undefined 表示线性消息列表；null 表示空会话。 */
   rootMessageId?: string | null
+  /** 进普通回收站的时间；缺省 = 在用。回收站保留 30 天（与被子回收站同款口径） */
+  trashedAt?: number
 }
 
 /** 会话列表元数据；消息只在打开会话时加载。 */
-export type SessionSummary = Pick<Session, 'id' | 'title' | 'createdAt' | 'updatedAt'>
+export type SessionSummary = Pick<
+  Session,
+  'id' | 'title' | 'createdAt' | 'updatedAt' | 'trashedAt'
+>
 
 /** 显式提取字段，避免将完整会话的消息带进列表。 */
 export const toSessionSummary = (session: SessionSummary): SessionSummary => ({
@@ -127,4 +138,5 @@ export const toSessionSummary = (session: SessionSummary): SessionSummary => ({
   title: session.title,
   createdAt: session.createdAt,
   updatedAt: session.updatedAt,
+  ...(session.trashedAt !== undefined ? { trashedAt: session.trashedAt } : {}),
 })

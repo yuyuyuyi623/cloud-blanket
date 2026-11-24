@@ -1,0 +1,52 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 460px;
+}
+
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stepTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.stepBody {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.pitfalls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 11px;
+  background: var(--cb-card-bg);
+}
+
+.pitfall {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.pitfall::before {
+  content: '· ';
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

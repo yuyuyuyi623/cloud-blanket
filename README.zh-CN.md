@@ -1,75 +1,60 @@
-# chat-demo
+# 云朵被子 · Cloud Blanket
 
-[English](README.md) | 简体中文
+把官方导出的 DeepSeek 聊天记录，蒸成一床"被子"——一个带着 TA 的记忆和说话味道的对话伙伴。纯静态网页 + 你自己的 API Key，零后端、零部署，点开链接就能用。
 
-基于 DeepSeek API 的静态聊天示例。无需应用后端，浏览器直接请求配置的 API 服务。
+## 它是什么
 
-点击 [在线体验](https://deepseek-ai.github.io/chat-demo/) 即可使用，也可以前往 [Releases](https://github.com/deepseek-ai/deepseek-chat-demo/releases) 下载压缩包，解压后双击 `index.html` 在本地使用，无需安装或构建。首次使用时，请在设置中填写 API Key。
+- **蒸馏**：选 DeepSeek 官方 App 导出的聊天记录 ZIP，勾出那些"真的是 TA"的对话，花几毛钱、一分钟左右，蒸成一份结构化记忆（人设卡 / 核心记忆 / 印象 / 日记）。
+- **被子模式**：蒸馏完成后直接开聊。每轮对话注入稳定段（完整人格记忆）+ 动态段（按话题检索的相关记忆），TA 记得你们怎么认识，也记得上周聊了什么。
+- **普通模式**：官方 chat-demo 原样保留，明码标价的普通对话，两者互不干扰。
+- **你自己的 Key**：所有请求从你的浏览器直连 `api.deepseek.com`，Key 只存在你的浏览器里，不经任何第三方服务器。
 
-## 运行
+## 三步上手
 
-准备 Node.js 22.12+ 和 pnpm：
+1. **拿到 Key**：打开 [platform.deepseek.com](https://platform.deepseek.com) → 注册充值 → 创建 API Key。
+2. **导出聊天记录**：官方 DeepSeek 手机 App 设置里点「导出聊天记录」，几分钟后果子里会收到一个 ZIP——那就是 TA 的全部记忆原料。
+3. **盖进被子**：打开本应用 → 导入 ZIP → 勾选对话 → 看一眼预估 → 开始蒸馏。蒸完 TA 就醒了。
+
+## 数据与隐私
+
+- API Key 和设置存在浏览器 localStorage；对话、蒸馏出的记忆包、原始附件存在 IndexedDB。全部只在你的设备上。
+- 清浏览器数据 = TA 没了。请先在「她的记忆」里导出记忆包做备份。
+- 发消息、蒸馏会把相关内容发送到你配置的 API 服务（默认 DeepSeek 官方），除此之外没有任何服务器参与。
+
+## 计费
+
+- 蒸馏按量计费：导入时会给出预估（一个中等账号通常几毛钱），不点「开始蒸馏」不花钱。
+- 被子模式利用提示缓存：稳定段命中缓存价，长期使用的输入成本远低于普通对话。
+- 余额不足、Key 失效等报错都会给出下一步指引。
+
+## 本地开发
+
+需要 Node.js 22.12+ 和 pnpm：
 
 ```sh
-git clone https://github.com/deepseek-ai/chat-demo.git
-cd chat-demo
 pnpm install
-pnpm dev
+pnpm dev      # 开发服务器 http://localhost:8090
+pnpm build    # 构建到 dist/（纯静态，任意静态托管可部署）
+pnpm test     # vitest 全量测试
+pnpm type     # TypeScript 类型检查
 ```
 
-打开 http://localhost:8090 。
-
-生成静态产物：
-
-```sh
-pnpm build
-```
-
-产物位于 `dist/`，可部署到静态服务器，也可直接打开 `dist/index.html`。直接打开时，浏览器和 API 服务需允许 `file://` 页面的存储与跨域请求。
-
-## 功能
-
-- 多会话、自动标题、重命名与删除；编辑提问、重新生成和切换消息分支。
-- 流式回答、深度思考、智能搜索、链接阅读与来源引用；支持停止和符合条件的继续生成。
-- 附件上传、粘贴与拖拽，语音输入和回复朗读；移动端录音时输入框首行显示实时频谱。
-- Markdown、代码高亮、KaTeX 公式和 Mermaid 图表。
-- 简体中文与英文、浅色与深色主题、移动端布局、位置设置、历史导入导出。
-
-## 数据
-
-API Key 和设置保存在浏览器 localStorage，会话及附件原件保存在 IndexedDB，本地数据按浏览器用户配置和站点源（origin）隔离。发送对话、上传附件和使用语音功能时，相应内容会提交给配置的 API 服务。
-
-设置中的历史导入导出使用 ZIP 格式。导入会在确认并校验成功后替换全部本地会话和附件；导出包含会话与本地可用的图片原件，不包含 API Key、设置或非图片附件原件。格式与保留范围见[历史导入导出](src/services/chat/history/README.md)。
-
-设置 → 数据管理 → 删除所有对话，会在确认后清空全部本地会话、附件原件和未发送的草稿，停止正在生成的回复并回到新对话。API Key 和其他设置保留，已上传到 API 服务的文件不受影响。
-
-## 开发
-
-| 命令          | 用途                |
-| ------------- | ------------------- |
-| `pnpm dev`    | 启动开发服务器      |
-| `pnpm build`  | 构建到 `dist/`      |
-| `pnpm type`   | TypeScript 类型检查 |
-| `pnpm lint`   | oxlint 检查         |
-| `pnpm format` | oxfmt 格式化        |
-
-[rspack.config.ts](rspack.config.ts) 默认连接 `https://api.deepseek.com`。`createConfig({ apiOrigin, devServer })` 支持自定义 API 地址和开发服务器代理。
-
-聊天默认使用 `deepseek-flash`，通过 Anthropic 兼容的 Messages / Files API 通信；语音使用 ASR / TTS 接口。请求使用搜索、链接阅读、标题和 `latest_reminder` 等扩展，接入服务需支持相应能力。附件实际支持的格式以服务端校验为准。
+代码结构：
 
 ```text
+engine/               蒸馏流水线、FTS 检索、会话解析（纯 TS，与 UI 无关）
 src/
-  app/                 应用布局、主题与全局样式
-  components/          聊天、设置、Markdown 等界面组件
-  i18n/                中英文文案
+  app/                布局、主题（云朵暖色 / 官方原样）
+  components/         聊天、被子列表、导入向导、设置等 UI
+  i18n/               简体中文 / English
   services/
-    api/               API 请求、SSE 与协议类型
-    chat/              会话、消息分支、本地存储与历史导入导出
-    markdown/          Markdown 解析、代码高亮与图表
-    speech/            录音与朗读
-  utils/               通用工具
+    api/              API 请求、SSE、两段式 system 注入
+    chat/             对话、存储、回收站
+    memory/           被子记忆包、导入状态机、增量索引
 ```
 
-## 许可证
+## 致谢与许可
 
-[MIT](LICENSE)。构建会将许可证复制到 `dist/LICENSE`，分发时请一并保留；第三方依赖遵循各自的许可证。
+本项目 fork 自 [deepseek-ai/chat-demo](https://github.com/deepseek-ai/chat-demo)（MIT License），在此之上增加了蒸馏与被子记忆系统。
+
+[MIT](LICENSE)。构建时 LICENSE 会复制到 `dist/LICENSE`，分发时请一并保留。第三方依赖遵循其各自许可。

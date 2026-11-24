@@ -7,11 +7,15 @@ export type Locale = 'zh-CN' | 'en-US'
 /** 主题偏好；默认跟随系统 */
 export type ThemePreference = 'light' | 'dark' | 'system'
 
+/** 界面风格：云朵暖色（默认，米黄卡片）/ 官方原样（全中性色） */
+export type BlanketStyle = 'warm' | 'plain'
+
 /** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
 type Settings = {
   apiKey: string | null
   locale: Locale
   themePreference: ThemePreference
+  blanketStyle: BlanketStyle
   location: UserLocation | null
   ttsVoice: TtsVoice
   thinking: boolean
@@ -24,6 +28,7 @@ const KEYS = {
   locale: 'chat-demo:locale',
   location: 'chat-demo:location',
   themePreference: 'chat-demo:theme-preference',
+  blanketStyle: 'chat-demo:blanket-style',
   ttsVoice: 'chat-demo:tts-voice',
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
@@ -84,6 +89,9 @@ const initialThemePreference = (): ThemePreference => {
   return saved === 'light' || saved === 'dark' ? saved : 'system'
 }
 
+/** 未保存过时使用云朵暖色 */
+const initialBlanketStyle = (): BlanketStyle => (read(KEYS.blanketStyle) === 'plain' ? 'plain' : 'warm')
+
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
@@ -92,6 +100,7 @@ export const useSettings = create<Settings>(() => ({
   locale: initialLocale(),
   location: initialLocation(),
   themePreference: initialThemePreference(),
+  blanketStyle: initialBlanketStyle(),
   ttsVoice: initialTtsVoice(),
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
@@ -112,6 +121,11 @@ export const setLocation = (value: UserLocation | null) => {
 export const setThemePreference = (themePreference: ThemePreference) => {
   write(KEYS.themePreference, themePreference)
   useSettings.setState({ themePreference })
+}
+
+export const setBlanketStyle = (blanketStyle: BlanketStyle) => {
+  write(KEYS.blanketStyle, blanketStyle)
+  useSettings.setState({ blanketStyle })
 }
 
 export const setTtsVoice = (ttsVoice: TtsVoice) => {

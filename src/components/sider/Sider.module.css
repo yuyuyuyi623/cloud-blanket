@@ -16,10 +16,14 @@
   justify-content: space-between;
   gap: 8px;
   box-sizing: border-box;
-  height: 48px;
+  min-height: 48px;
   margin-bottom: 16px;
   padding: 15px 0 10px 4px;
   flex-shrink: 0;
+}
+
+.branding {
+  min-width: 0;
 }
 
 .appName {
@@ -32,6 +36,23 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   color: var(--dsw-alias-brand-primary);
+}
+
+/* 官方注脚：小字链到上游仓库，声明"基于官方 demo 开发"，不冒充官方 */
+.appAttribution {
+  display: block;
+  padding-left: 4px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-dimmed);
+  text-decoration: none;
+}
+
+.appAttribution:hover {
+  color: var(--dsw-alias-label-tertiary);
 }
 
 .newChat {
@@ -77,6 +98,36 @@
 .newChatIcon {
   display: flex;
   margin-right: 6px;
+}
+
+/* 盖进被子：新建对话下方的次要入口，样式跟入口卡片同一套暖色 */
+.importEntry {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 12px;
+  background: var(--cb-card-bg);
+  color: var(--cb-card-title);
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+
+  svg {
+    flex-shrink: 0;
+    color: var(--cb-icon-color);
+  }
+
+  &:hover {
+    background: var(--cb-card-bg-hover);
+  }
 }
 
 .listWrap {

@@ -7,7 +7,10 @@ import { MessageList } from '../messages/MessageList.js'
 import { MobileHeader } from './MobileHeader.js'
 import styles from './SessionView.module.css'
 
-/** 会话页：标题栏（移动端为顶栏）+ 消息列表，输入框吸底 */
+/**
+ * 会话页：标题栏（移动端为顶栏）+ 消息列表，输入框吸底。
+ * 她的记忆入口统一在右上角"她的角落"抽屉，标题栏不再放按钮（易误触）。
+ */
 export const SessionView = ({
   session,
   streaming,
@@ -20,6 +23,7 @@ export const SessionView = ({
   const t = useTranslate()
   const isMobile = useIsMobile()
   const title = session.title || t('untitledChat')
+
   return (
     <div className={styles.view}>
       {isMobile ? (

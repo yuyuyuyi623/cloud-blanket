@@ -1,0 +1,84 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 260px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 11px;
+  background: var(--cb-card-bg);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+}
+
+.linkBtn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.linkBtn:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.linkBtnDanger {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-status-danger);
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.linkBtnDanger:hover {
+  opacity: 1;
+}
+
+.empty {
+  padding: 14px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}

@@ -23,8 +23,8 @@ export type TextCitation = {
 /** 文本块：挂过引用的块之后，后续正文另起新块；同一块内引用按 url 去重 */
 export type TextBlock = { type: 'text'; text: string; citations?: TextCitation[] }
 
-/** 思考块：签名在块结束前经 signature_delta 下发，值为本次响应的消息 id */
-export type ThinkingBlock = { type: 'thinking'; thinking: string; signature: string }
+/** 思考块：签名在块结束前经 signature_delta 下发，值为本次响应的消息 id；OpenAI 格式端点不下发签名 */
+export type ThinkingBlock = { type: 'thinking'; thinking: string; signature?: string }
 
 /** 服务端识别调用所属联网能力用的 kind，区分文字搜索、图搜及边想边搜。 */
 export type ServerToolKind =
@@ -134,31 +134,12 @@ export type FileBlockParam = {
   source: { type: 'file'; file_id: string }
 }
 
-/** 接口接受的调用块；历史只回传 kind 为 read_link 的调用 */
-export type ServerToolUseBlockParam = Pick<
-  ServerToolUseBlock,
-  'type' | 'id' | 'name' | 'input' | 'kind'
->
-
-/** 接口接受的搜索结果块；历史搜索结果不回传 */
-export type WebSearchToolResultBlockParam = WebSearchToolResultBlock
-
-/** 只回传 read_link 结果；成功时原样保留 signature，供服务端解密恢复网页上下文 */
-export type WebFetchToolResultBlockParam = WebFetchToolResultBlock
-
-export type AssistantBlockParam =
-  | TextBlockParam
-  | ThinkingBlock
-  | ServerToolUseBlockParam
-  | WebSearchToolResultBlockParam
-  | WebFetchToolResultBlockParam
-
 /** 末尾 assistant 自动触发继续生成，无需 prefix 字段 */
 export type MessageParam =
   /** Chat Engine 扩展角色，位于对应 user 前；需服务端支持 latest_reminder。 */
   | { role: 'latest_reminder'; content: string }
   | { role: 'user'; content: string | (FileBlockParam | TextBlockParam)[] }
-  | { role: 'assistant'; content: AssistantBlockParam[] }
+  | { role: 'assistant'; content: string; server_tool_calls?: ServerToolCallStep[]; prefix?: true }
 
 /** 开启联网搜索与边想边搜 */
 export type DeepseekWebSearchTool = {
@@ -174,13 +155,139 @@ export type DeepseekReadUrlTool = {
 
 export type CreateMessageRequest = {
   model: ChatModel
+  /** 稳定段（人设与长期记忆），历史之前的第一条 system */
   system: string
+  /** 动态段（本轮检索命中的旧事），历史之后的最后一条 system；被子模式每轮按提问现算 */
+  systemSuffix?: string
   messages: MessageParam[]
   thinking: { type: 'enabled' | 'disabled' }
   tools: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
   safety_check: { level: 'high' }
   title?: { enabled: boolean }
 }
+
+// ---------- OpenAI 兼容端点（POST /chat/completions）线格式 ----------
+// 文档：https://api-docs.deepseek.com/zh-cn/api/create-chat-completion
+// 内部模型（上面的 MessageParam / MessageStreamEvent / 内容块）保持不变；
+// chatCompletions.ts 负责内部模型 ↔ 线格式的双向翻译。
+
+/** 线格式下工具调用的动作（与内部 ServerToolInput 的 action 字段口径互转） */
+export type ServerToolCallAction =
+  | { type: 'search'; queries: string[]; query?: string }
+  | { type: 'open_page'; url: string }
+  | { type: 'find_in_page'; url: string; pattern: string }
+  | { type: 'read_link'; url: string }
+
+/** 联网工具的单次调用（线格式 server_tool_calls[].calls[] 的元素），多轮请求原样回传 */
+export type ServerToolCall = {
+  index: number
+  id: string
+  type: 'deepseek_web_search' | 'deepseek_read_url'
+  kind: ServerToolKind
+  action: ServerToolCallAction
+  /** 响应结束时未完成的调用为 failed */
+  status: 'completed' | 'failed'
+  /** read_link 成功时的网页展示信息；网页正文加密在 signature 中，不直接下发 */
+  page?: { url: string; title: string | null; published_at: string | null }
+  /** 成功阅读的链接才有；多轮请求原样回传后服务端把网页正文拼回上下文 */
+  signature?: string
+  /** 搜索结果；展示字段与内部 WebSearchResult 一致，无加密摘要 */
+  sources?: {
+    type: 'url'
+    url: string
+    title: string
+    snippet: string
+    site_name: string | null
+    site_icon: string | null
+    published_at: string | null
+    image_url?: string
+  }[]
+  error?: { code: string }
+}
+
+/** 联网工具的一步：这一步的思考 + 这一步发起的调用 */
+export type ServerToolCallStep = {
+  index: number
+  reasoning_content: string
+  calls: ServerToolCall[]
+}
+
+/** OpenAI 格式请求消息；assistant 的 server_tool_calls 原样回传，prefix 用于续写 */
+export type OpenAiMessage =
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string | ({ type: 'text'; text: string } | { type: 'file'; file_id: string })[] }
+  | { role: 'latest_reminder'; content: string }
+  | {
+      role: 'assistant'
+      content: string
+      server_tool_calls?: ServerToolCallStep[]
+      /** 续写：加在最后一条 assistant 消息上（beta 接口能力，真机验证项） */
+      prefix?: true
+    }
+
+/** OpenAI 格式 usage。缓存字段两种口径并存（真机实测 prompt_tokens_details.cached_tokens，
+ * 文档另载 prompt_cache_hit/miss_tokens），读取时用 readCacheHitTokens 取有值的那个 */
+export type OpenAiUsage = {
+  prompt_tokens: number
+  completion_tokens: number
+  prompt_cache_hit_tokens?: number
+  prompt_cache_miss_tokens?: number
+  prompt_tokens_details?: { cached_tokens?: number }
+  total_tokens: number
+  completion_tokens_details?: { reasoning_tokens?: number; safety_tokens?: number }
+  server_tool_use?: { tool_search?: number; tool_fetch?: number; tool_image_search?: number }
+}
+
+/** 缓存命中数：优先 prompt_cache_hit_tokens，退回 prompt_tokens_details.cached_tokens */
+export const readCacheHitTokens = (usage: OpenAiUsage): number =>
+  usage.prompt_cache_hit_tokens ?? usage.prompt_tokens_details?.cached_tokens ?? 0
+
+/** 流式过程中 choice 上的扩展字段，一个 chunk 最多一个事件 */
+export type OpenAiServerToolEvent =
+  | { type: 'step_reasoning_done'; step: number }
+  | { type: 'call_started'; step: number; call: ServerToolCall }
+  | { type: 'call_completed'; step: number; call: ServerToolCall }
+
+/** 引用：位置按 content 的 Unicode 码点计数 */
+export type OpenAiAnnotation = {
+  type: 'url_citation'
+  url_citation: { url: string; title: string | null; start_index: number; end_index: number }
+}
+
+export type OpenAiDelta = {
+  content?: string | null
+  reasoning_content?: string | null
+  title?: string
+  annotations?: OpenAiAnnotation[]
+  server_tool_calls?: ServerToolCallStep[]
+  refusal?: string
+  /** 部分实现把过程事件放在 delta 里，与 choice 上的字段等价 */
+  server_tool_event?: OpenAiChunk['choices'][number]['server_tool_event']
+}
+
+export type OpenAiFinishReason =
+  | 'stop'
+  | 'length'
+  | 'content_filter'
+  | 'tool_calls'
+  | 'insufficient_system_resource'
+  | 'aborted'
+  | null
+
+export type OpenAiChunk = {
+  choices: {
+    index: number
+    delta: OpenAiDelta
+    finish_reason: OpenAiFinishReason
+    server_tool_event?: OpenAiServerToolEvent
+  }[]
+  usage?: OpenAiUsage | null
+}
+
+// ---------- 内部流式事件（两种端点翻译后的统一形态） ----------
+
+/** 仅内部使用：本轮请求完整的服务端工具调用（含流式事件不带走的 signature），由 applyEvent 存进回复 */
+export type RawServerToolCallsEvent = { type: 'raw_server_tool_calls'; calls: ServerToolCallStep[] }
 
 // ---------- 响应：流式事件 ----------
 
@@ -232,6 +339,7 @@ export type MessageStreamEvent =
     }
   | { type: 'message_stop' }
   | { type: 'ping' }
+  | RawServerToolCallsEvent
 
 /**
  * POST /anthropic/v1/files 的 purpose：PDF 与 Word、PPT 需要服务端做版面解析；

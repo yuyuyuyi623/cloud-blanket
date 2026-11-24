@@ -1,0 +1,400 @@
+.dialog {
+  width: 640px;
+  max-height: calc(100vh - 48px);
+  --modal-header-gap: 10px;
+}
+
+.dialogMain {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  width: 100%;
+}
+
+.intro {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* ── 选文件 ───────────────────────────────────── */
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 168px;
+  padding: 24px;
+  border: 1px dashed var(--dsw-alias-border-inverted);
+  border-radius: 16px;
+  background: var(--cb-card-bg);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.drop:hover,
+.dropActive {
+  border-color: var(--dsw-alias-brand-primary);
+  background: var(--cb-card-bg-hover);
+}
+
+.dropTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cb-card-title);
+}
+
+.dropHint {
+  font-size: 12px;
+  color: var(--cb-card-desc);
+}
+
+/* ── 扫描 / 蒸馏状态 ───────────────────────────── */
+
+.center {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 220px;
+  text-align: center;
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  border: 2px solid var(--dsw-alias-border-inverted);
+  border-top-color: var(--dsw-alias-brand-primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.status {
+  margin: 0;
+  font-size: 14px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.subtle {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.warn {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.error {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+  word-break: break-word;
+}
+
+/* ── 筛选工具条 ─────────────────────────────────── */
+
+.tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 8px;
+  background: var(--cb-card-bg);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.search:focus {
+  border-color: var(--dsw-alias-brand-primary);
+  outline: none;
+}
+
+.toolRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chips {
+  display: flex;
+  gap: 4px;
+}
+
+.chip {
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chipOn {
+  border-color: var(--dsw-alias-brand-primary);
+  background: transparent;
+  color: var(--dsw-alias-brand-primary);
+}
+
+.selects {
+  display: flex;
+  gap: 6px;
+}
+
+.select {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 8px;
+  background: var(--cb-card-bg);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.toolHint {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.emptyList {
+  margin: 0;
+  padding: 24px 8px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  text-align: center;
+}
+
+/* ── 会话列表 ───────────────────────────────────── */
+
+.summaryRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fileName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  word-break: break-all;
+}
+
+.bulkActions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--dsw-alias-border-inverted);
+  border-radius: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.row:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.rowChecked {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.checkbox {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+}
+
+.rowMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.rowTitle {
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowMeta {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.rowHit {
+  overflow: hidden;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--cb-card-desc);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 底部账目 ───────────────────────────────────── */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.estimateMoney {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.estimateWarn {
+  font-size: 11px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.bill {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 2px;
+  border-top: 1px solid var(--dsw-alias-border-inverted);
+  border-bottom: 1px solid var(--dsw-alias-border-inverted);
+}
+
+.billRow {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 4px;
+  font-size: 13px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.billTotal {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* ── 蒸馏进度 ───────────────────────────────────── */
+
+.progressTrack {
+  width: 100%;
+  max-width: 320px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.progressFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--dsw-alias-brand-primary);
+  transition: width 0.3s ease;
+}
+
+/* ── 完成 ───────────────────────────────────────── */
+
+.doneTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+/* "卡住了？"指引链接：主线每步都能跳FAQ（交接文档 §一5） */
+.guideHint {
+  margin-top: 10px;
+  align-self: center;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.guideHint:hover {
+  color: var(--dsw-alias-label-primary);
+  text-decoration: underline;
+}
