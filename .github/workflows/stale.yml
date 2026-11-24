@@ -1,0 +1,28 @@
+name: Close stale issues
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Mark and close inactive issues
+        uses: actions/stale@v9
+        with:
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-message: >
+            这个 Issue 已经 60 天没有活动了。如果问题还在，回复任意内容（比如「还在」）就会重新计时；
+            再过 14 天仍无活动将自动关闭。关闭不代表问题不重要，只是维护者精力有限——感谢理解。
+          close-issue-message: >
+            因长期无活动自动关闭。问题还在的话，欢迎重新打开一个新 Issue。
+          stale-issue-label: stale
+          exempt-issue-labels: pinned,keep
+          operations-per-run: 30

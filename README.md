@@ -6,6 +6,12 @@
 
 **在线使用**：[点开链接即可](https://yuyuyuyi623.github.io/cloud-blanket/) · **新手图文教程（17 图）**：[tutorial](https://yuyuyuyi623.github.io/cloud-blanket/tutorial/)
 
+## 反馈与支持
+
+遇到问题请[提 Issue](https://github.com/yuyuyuyi623/cloud-blanket/issues/new?template=bug_report.yml)（需要免费的 GitHub 账号；建议先看[新手图文教程](https://yuyuyuyi623.github.io/cloud-blanket/tutorial/)，大部分问题里面有答案）。想加功能也可以[提建议](https://github.com/yuyuyuyi623/cloud-blanket/issues/new?template=feature_request.yml)。
+
+> 个人项目，维护者一人，回复不定期。**只通过 Issue 沟通**，微信 / QQ / 邮箱等私信渠道恕不接待。
+
 ## 它是什么
 
 - **蒸馏**：选 DeepSeek 官方 App 导出的聊天记录 ZIP，勾出那些"真的是 TA"的对话，花几毛钱、一分钟左右，蒸成一份结构化记忆（人设卡 / 核心记忆 / 印象 / 日记）。

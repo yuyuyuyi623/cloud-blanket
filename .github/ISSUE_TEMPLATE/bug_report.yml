@@ -1,0 +1,50 @@
+name: 报个 bug
+description: 云朵被子出问题了？填这张表，30 秒填完
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！动手之前，建议先过一遍 [新手图文教程](https://yuyuyuyi623.github.io/cloud-blanket/tutorial/)——大部分问题教程里有答案。
+  - type: dropdown
+    id: step
+    attributes:
+      label: 卡在哪一步？
+      options:
+        - 填 API Key / 设置
+        - 从 DeepSeek 导出聊天记录 zip
+        - 上传 zip / 勾选 / 蒸馏
+        - 聊天（被子模式或普通模式）
+        - 安装到桌面 / 找不到图标
+        - 其他
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: 什么设备和浏览器？
+      options:
+        - 安卓手机 + Edge
+        - 安卓手机 + Chrome
+        - iPhone + Safari
+        - 电脑 + Edge / Chrome
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么？
+      description: 你做了什么操作、期望发生什么、实际发生了什么（提示报错的话把报错文字一并贴上）
+    validations:
+      required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: 截图（可选）
+      description: 截图前把个人信息（手机号、Key 等）打码
+  - type: input
+    id: contact
+    attributes:
+      label: 联系方式（可选）
+      description: 可不填；不填就在 Issue 里直接沟通

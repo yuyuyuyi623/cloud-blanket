@@ -6,6 +6,12 @@ Turn a DeepSeek chat export into a "blanket": a chat companion that carries some
 
 **Online:** [open the app](https://yuyuyuyi623.github.io/cloud-blanket/) · **Illustrated tutorial (17 screenshots, Chinese):** [tutorial](https://yuyuyuyi623.github.io/cloud-blanket/tutorial/)
 
+## Feedback & Support
+
+Found a bug? Please [open an issue](https://github.com/yuyuyuyi623/cloud-blanket/issues/new?template=bug_report.yml) (a free GitHub account is required; the [illustrated tutorial](https://yuyuyuyi623.github.io/cloud-blanket/tutorial/) covers most questions). Feature ideas are welcome [here](https://github.com/yuyuyuyi623/cloud-blanket/issues/new?template=feature_request.yml).
+
+> Personal project, single maintainer, replies may be slow. **Issues only** — no WeChat / QQ / email, please.
+
 ## What it does
 
 - **Distillation** — Import the ZIP exported from the official DeepSeek app, pick the conversations that really capture that person, and distill them (a few cents, about a minute) into structured memory: persona card, core memories, impressions, diary.
