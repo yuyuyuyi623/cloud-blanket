@@ -236,6 +236,9 @@ export const BlanketImportDialog = () => {
               <p className={linkSent ? styles.linkStarted : styles.linkHint}>
                 {linkSent ? t('blanketImportLinkStarted') : t('blanketImportLinkHint')}
               </p>
+              {/* 分享接收（manifest share_target + sw 暂存）：装成 App 后从通知栏/文件管理器
+                  把 zip 分享给「云朵被子」，就不用自己找文件了 */}
+              <p className={styles.linkHint}>{t('blanketImportShareHint')}</p>
             </div>
             {error ? <p className={styles.error}>{error}</p> : null}
             <button type="button" className={styles.guideHint} onClick={openTutorial}>

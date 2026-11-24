@@ -24,6 +24,8 @@ import { CollapsedSider } from '../components/sider/CollapsedSider.js'
 import { closeMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
 import { BlanketImportDialog } from '../components/blanket/BlanketImportDialog.js'
+import { chooseArchive, openBlanketImport, useBlanketImport } from '../services/memory/importState.js'
+import { clearShareParam, takeSharedArchive } from '../services/memory/sharedImport.js'
 import { BlanketSidePanel } from '../components/blanket/BlanketSidePanel.js'
 import styles from './App.module.css'
 
@@ -71,6 +73,24 @@ export const App = () => {
   useEffect(() => {
     void initChat()
     // 首启引导不自动弹（羽翼 2026-11-24 拍板）：无 Key 访客点「随便聊聊」时才由 openWelcome 触发
+  }, [])
+
+  // 从通知栏/文件管理器「分享」过来的包：取出来直接进导入流程，省掉用户自己找文件。
+  // 正在蒸馏时先不动（那一步关窗就是钱花了、记忆没了），文件留在缓存里下次启动再取。
+  useEffect(() => {
+    const state = useBlanketImport.getState()
+    if (state.open && state.step === 'running') {
+      return
+    }
+    void (async () => {
+      const shared = await takeSharedArchive()
+      clearShareParam()
+      if (!shared) {
+        return
+      }
+      openBlanketImport()
+      void chooseArchive(shared)
+    })()
   }, [])
 
   return (

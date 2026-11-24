@@ -236,9 +236,11 @@ export const zh = {
   blanketImportLinkAction: '下载',
   blanketImportLinkInvalid: '链接不对：应该是 https:// 开头、完整的一串，从导出页「复制下载链接」拿到的那个',
   blanketImportLinkHint:
-    '点下载后交给浏览器自己下（手机约 200 多 MB，大部分是图片），下完回到上面点「选择文件」——刚下的包就在文件列表最上面。',
+    '点下载后交给浏览器自己下（手机约 200 多 MB，大部分是图片）。下拉通知栏能看到进度，下完回上面点「选择文件」——包在「内部存储 / Download」里，文件列表最上面也有。',
   blanketImportLinkStarted:
-    '已开始下载。下完回到这里点上面「选择文件」，刚下的包在列表最上面（文件名 deepseek_data-*.zip）。',
+    '已交给浏览器下载。下拉通知栏看进度（这条下载就在里面）；下完回到这里点上面「选择文件」，包在「内部存储 / Download」，列表最上面也有（deepseek_data-*.zip）。',
+  blanketImportShareHint:
+    '装成 App 后还有更省事的一招：下载完成的通知栏里（或文件管理器里长按那个 zip）点「分享」→ 选「云朵被子」，包会直接进到这里，不用自己找文件。',
   scanErrCorrupt: '这个 ZIP 读不出来，多半是没下载完整：回邮箱重新下载一份，别改名再传',
   scanErrEncrypted: '这个 ZIP 带密码：官方导出的包不会加密，你选的可能是别的文件',
   scanErrNotZip: '这不是聊天记录的 ZIP 包：选 DeepSeek 官方 App 导出的那份（deepseek_data-*.zip，别改名）',

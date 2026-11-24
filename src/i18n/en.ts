@@ -243,9 +243,11 @@ export const en = {
   blanketImportLinkAction: 'Download',
   blanketImportLinkInvalid: 'That does not look like a link — it should start with https:// and be the full URL copied from the export page.',
   blanketImportLinkHint:
-    'The browser downloads it for you (a few hundred MB on mobile, mostly images). When it finishes, tap "choose a file" above — the package you just downloaded is at the top of the list.',
+    'The browser downloads it for you (a few hundred MB on mobile, mostly images). Pull down the notification shade to watch progress; when it finishes, tap "choose a file" above — the package sits in Internal storage / Download and is also at the top of the file list.',
   blanketImportLinkStarted:
-    'Download started. When it finishes, tap "choose a file" above — the new package is at the top of the list (deepseek_data-*.zip).',
+    'Handed to the browser. Pull down the notification shade to watch progress; when it finishes, tap "choose a file" above — it is in Internal storage / Download, also at the top of the list (deepseek_data-*.zip).',
+  blanketImportShareHint:
+    'Once installed as an app there is an easier route: in the "download complete" notification (or long-press the zip in Files) tap Share → 云朵被子 and the package lands right here — no need to hunt for the file.',
   scanErrCorrupt: 'This ZIP cannot be read — the download was probably incomplete. Download it again from your mailbox (keep the original name) and retry.',
   scanErrEncrypted: 'This ZIP is password-protected: official exports are never encrypted, so this is probably a different file.',
   scanErrNotZip: 'Not a chat-export ZIP: pick the package exported from the official DeepSeek app (deepseek_data-*.zip, keep the name).',
