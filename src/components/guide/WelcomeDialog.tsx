@@ -10,7 +10,7 @@ import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { useWelcomeDialog, closeWelcome } from './welcomeDialogState.js'
-import { openGuide } from './guideDialogState.js'
+import { openTutorial } from './tutorialLink.js'
 import styles from './GuideDialog.module.css'
 
 export const WelcomeDialog = () => {
@@ -46,7 +46,7 @@ export const WelcomeDialog = () => {
             variant="outlined"
             onClick={() => {
               closeWelcome()
-              openGuide()
+              openTutorial()
             }}
           >
             {t('guideLinkTitle')}

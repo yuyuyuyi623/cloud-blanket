@@ -22,7 +22,7 @@ import { MIN_TURNS_OPTIONS, filterSessions, type SortBy } from '../../../engine/
 import { DISTILL_CONCURRENCY } from '../../../engine/config.js'
 import type { DistillProgress } from '../../../engine/distill.js'
 import { openSettings } from '../settings/settingsDialogState.js'
-import { openGuide } from '../guide/guideDialogState.js'
+import { openTutorial } from '../guide/tutorialLink.js'
 import { BlanketDetail } from './BlanketDetail.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
@@ -178,7 +178,7 @@ export const BlanketImportDialog = () => {
               }}
             />
             {error ? <p className={styles.error}>{error}</p> : null}
-            <button type="button" className={styles.guideHint} onClick={openGuide}>
+            <button type="button" className={styles.guideHint} onClick={openTutorial}>
               {t('guideStuckHint')}
             </button>
           </>

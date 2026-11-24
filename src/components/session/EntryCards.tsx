@@ -12,7 +12,7 @@ import { showToast } from '../base/toastState.js'
 import { openBlanketImport } from '../../services/memory/importState.js'
 import { useSettings } from '../../services/settings.js'
 import { getDraft, setDraftText } from '../../services/chat/drafts.js'
-import { openGuide } from '../guide/guideDialogState.js'
+import { openTutorial } from '../guide/tutorialLink.js'
 import { openWelcome } from '../guide/welcomeDialogState.js'
 import styles from './EntryCards.module.css'
 
@@ -103,7 +103,7 @@ export const EntryCards = () => {
       </div>
       <div className={styles.linkRow}>
         <div className={styles.linkSlot}>
-          <button type="button" className={styles.guideLink} onClick={openGuide}>
+          <button type="button" className={styles.guideLink} onClick={openTutorial}>
             {t('guideLinkTitle')}
           </button>
         </div>

@@ -1,6 +1,6 @@
 import { useIsMobile } from '../../app/viewport.js'
 import { useTranslate } from '../../i18n/index.js'
-import { openGuide } from '../guide/guideDialogState.js'
+import { openTutorial } from '../guide/tutorialLink.js'
 import { ChatInput } from '../chatInput/ChatInput.js'
 import { EntryCards, PlayChips, openJustChat } from './EntryCards.js'
 import { MobileHeader } from './MobileHeader.js'
@@ -22,7 +22,7 @@ export const Welcome = () => {
             <button type="button" className={styles.mobileLink} onClick={() => openJustChat(t)}>
               {t('entryChatTitle')} →
             </button>
-            <button type="button" className={styles.mobileLink} onClick={() => openGuide()}>
+            <button type="button" className={styles.mobileLink} onClick={() => openTutorial()}>
               {t('guideLinkTitle')}
             </button>
           </div>

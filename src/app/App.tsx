@@ -25,7 +25,6 @@ import { closeMobileSider } from '../components/sider/mobileSiderState.js'
 import { MobileSider, Sider } from '../components/sider/Sider.js'
 import { BlanketImportDialog } from '../components/blanket/BlanketImportDialog.js'
 import { BlanketSidePanel } from '../components/blanket/BlanketSidePanel.js'
-import { GuideDialog } from '../components/guide/GuideDialog.js'
 import styles from './App.module.css'
 
 export const App = () => {
@@ -136,7 +135,6 @@ export const App = () => {
       </div>
       <SettingsDialog />
       <BlanketImportDialog />
-      <GuideDialog />
       <Toast />
     </>
   )
