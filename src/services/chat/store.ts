@@ -50,10 +50,6 @@ import {
 
 /** deepseek-flash 同时支持深度思考与图片输入 */
 const MODEL: ChatModel = 'deepseek-flash'
-/**
- * 被子模式入口的待绑定被子 id：从被子点"开始聊天"而还没有对话框时先记下被子，
- * 第一句话创建的会话再绑回去。用户中途点开别的会话视为放弃（selectSession 里解除）。 */
-let pendingBlanketId: string | null = null
 /** 所有生成请求统一携带的助手身份说明 */
 const SYSTEM_PROMPT = '该助手为DeepSeek，由深度求索公司创造。'
 /** 保留最近打开的详情；当前会话、生成中及尚未成功保存的会话不淘汰。 */
@@ -93,6 +89,14 @@ type ChatState = {
   sessionSaveErrors: Record<string, boolean>
   /** null 表示新对话（欢迎页） */
   activeId: string | null
+  /**
+   * 被子模式入口的待绑定被子 id：从被子点"开始聊天"而还没有对话框时先记下被子，
+   * 第一句话创建的会话再绑回去。用户中途点开别的会话视为放弃（selectSession 里解除）。
+   *
+   * 放进 state 而不是模块变量：欢迎页要据此显示"正在和「XX」聊天"——
+   * 没有这行字，还没聊过的被子点进去跟原来的欢迎页长得一模一样，用户会以为点了没反应。
+   */
+  pendingBlanketId: string | null
   /** 正在生成回复的会话 */
   streaming: Record<string, AbortController>
 }
@@ -107,6 +111,7 @@ export const useChatStore = create<ChatState>(() => ({
   sessionLoadErrors: {},
   sessionSaveErrors: {},
   activeId: null,
+  pendingBlanketId: null,
   streaming: {},
 }))
 
@@ -488,8 +493,8 @@ export const replaceHistory = async (write: () => Promise<void>): Promise<number
  * 把刚创建的会话绑回被子：标题直接用被子名（自动起名就不抢了），
  * 会话 id 写进被子记录——之后这个会话里的每一轮都走被子模式（稳定段 + 动态段检索）。 */
 const bindBlanketChat = async (sessionId: string): Promise<void> => {
-  const blanketId = pendingBlanketId
-  pendingBlanketId = null
+  const blanketId = get().pendingBlanketId
+  set({ pendingBlanketId: null })
   if (!blanketId || sessionId === null) {
     return
   }
@@ -514,11 +519,19 @@ const bindBlanketChat = async (sessionId: string): Promise<void> => {
 
 /** 从被子入口进入聊天：先记下被子，再开一个新对话框等第一句话 */
 export const armBlanketChat = (blanketId: string): void => {
-  pendingBlanketId = blanketId
+  set({ pendingBlanketId: blanketId })
+}
+
+/** 离开被子入口（点"新对话"、点别的会话）：下一句话不再绑到被子上 */
+export const disarmBlanketChat = (): void => {
+  if (get().pendingBlanketId !== null) {
+    set({ pendingBlanketId: null })
+  }
 }
 
 export const newChat = () => {
   if (!get().importingHistory) {
+    // 点"新对话"就是放弃被子入口；从被子进来时是先 arm 再 newChat，所以这里不清
     set({ activeId: null })
     trimSessionCache()
   }
@@ -527,9 +540,8 @@ export const newChat = () => {
 export const selectSession = (id: string) => {
   if (!get().importingHistory && get().sessions.some((session) => session.id === id)) {
     // 点开别的会话说明放弃了"从被子开始聊"的入口，别把下一句话误绑到被子上
-    pendingBlanketId = null
     touchSession(id)
-    set({ activeId: id })
+    set({ activeId: id, pendingBlanketId: null })
     void ensureSessionLoaded(id)
     trimSessionCache()
   }

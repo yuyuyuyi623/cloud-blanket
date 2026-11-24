@@ -11,6 +11,7 @@ import {
 import { setSiderCollapsed } from '../../services/settings.js'
 import { groupSessions } from '../../services/chat/sessionGroups.js'
 import {
+  disarmBlanketChat,
   newChat,
   trashSession,
   useChatStore,
@@ -85,6 +86,7 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
         type="button"
         className={styles.newChat}
         onClick={() => {
+          disarmBlanketChat()
           newChat()
           closeMobileSider()
         }}

@@ -28,6 +28,53 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* ── 从"我的被子"点进来、还没说话：一行提示，说明这一页是她的对话 ── */
+
+.blanketHint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: -9px 0 18px;
+  padding: 8px 14px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 12px;
+  background: var(--cb-card-bg);
+  text-align: center;
+}
+
+.blanketHintText {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--cb-card-title);
+}
+
+.blanketHintSub {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--cb-card-desc);
+}
+
+.blanketHintExit {
+  margin-top: 2px;
+  border: none;
+  background: none;
+  padding: 2px 6px;
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.blanketHintExit:active {
+  opacity: 0.6;
+}
+
 @media (max-width: 439px) {
   .greeting {
     font-size: 20px;

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { openBlanketChat } from '../../services/chat/blanketChat.js'
 import { refreshBlankets, useBlankets } from '../../services/memory/blanketStore.js'
+import { closeMobileSider } from '../sider/mobileSiderState.js'
 import styles from './BlanketList.module.css'
 
 /**
@@ -35,7 +36,12 @@ export const BlanketList = () => {
           key={blanket.id}
           type="button"
           className={styles.item}
-          onClick={() => openBlanketChat(blanket.id)}
+          onClick={() => {
+            openBlanketChat(blanket.id)
+            // 手机端抽屉要主动收起：没聊过的被子走的是新对话，activeId 本来就是 null，
+            // App 里"activeId 变化就收抽屉"的 effect 不会触发，抽屉会一直挡着，看着像没点动。
+            closeMobileSider()
+          }}
           title={t('blanketDetailChat')}
         >
           <span className={styles.itemName}>{blanket.name}</span>
