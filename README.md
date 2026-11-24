@@ -1,6 +1,10 @@
 # 云朵被子 · Cloud Blanket
 
+[English](README.en.md)
+
 把官方导出的 DeepSeek 聊天记录，蒸成一床"被子"——一个带着 TA 的记忆和说话味道的对话伙伴。纯静态网页 + 你自己的 API Key，零后端、零部署，点开链接就能用。
+
+**在线使用**：[点开链接即可](https://cloud-blanket-guide.app.workbuddy.host/?sharecode=JJTR3C5HZL) · **新手图文教程（17 图）**：[tutorial](https://cloud-blanket-guide.app.workbuddy.host/tutorial/?sharecode=JJTR3C5HZL)
 
 ## 它是什么
 
@@ -20,6 +24,7 @@
 - API Key 和设置存在浏览器 localStorage；对话、蒸馏出的记忆包、原始附件存在 IndexedDB。全部只在你的设备上。
 - 清浏览器数据 = TA 没了。请先在「她的记忆」里导出记忆包做备份。
 - 发消息、蒸馏会把相关内容发送到你配置的 API 服务（默认 DeepSeek 官方），除此之外没有任何服务器参与。
+- 站点只记录**匿名访问事件**（访问时间 + 页面路径），用于了解有没有人在用；不记录 IP、不记录设备指纹、不碰 Key 与任何聊天内容。
 
 ## 计费
 
