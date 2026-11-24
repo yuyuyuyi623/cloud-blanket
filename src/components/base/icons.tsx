@@ -542,3 +542,16 @@ export const IconBookOutline16 = () => (
     <path d="M5.4 5.4h5.2M5.4 8h5.2M5.4 10.6h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 )
+
+/** 云朵（她的角落触发按钮）：16px 渲染、24 viewBox 上描边 2.5，折算后与 16vb 的 1.7 描边同粗细 */
+export const IconCloudOutline16 = () => (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M6.657 18c-2.572 0-4.657-2.007-4.657-4.483 0-2.475 2.085-4.482 4.657-4.482.393-1.762 1.794-3.204 3.843-3.204 2.106 0 3.77 1.527 4.017 3.472 2.11.254 3.483 1.984 3.483 4.033 0 2.374-1.973 4.164-4.35 4.164H6.657z"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)

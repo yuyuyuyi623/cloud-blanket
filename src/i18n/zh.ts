@@ -166,6 +166,17 @@ export const zh = {
     '数据只存在本设备浏览器里。iPhone 用 Safari 时，请通过「分享 → 添加到主屏幕」使用，否则 7 天不用可能被系统清理；换设备或清缓存前，先「导出所有历史对话」。',
   storageQuotaFull:
     '本地存储空间已满，请先「导出所有历史对话」备份，再删除部分旧对话或大附件。',
+  installRowTitle: '添加到桌面',
+  installRowInstalled: '已添加到桌面',
+  installRowInstalledHint: '已经在独立窗口里运行',
+  installIosStep1: '点浏览器底部的「分享」按钮（方框加箭头）',
+  installIosStep2: '在菜单里选「添加到主屏幕」',
+  installIosStep3: '点「确认」完成',
+  installIosNote: '加到主屏幕后，数据就不会被系统 7 天清理',
+  installGenericStep1: '点浏览器菜单（≡ 或 ⋮）',
+  installGenericStep2: '找「添加到桌面 / 安装应用 / 添加到主屏幕」',
+  installGenericStep3: '点「确认 / 安装」完成',
+  installCopySteps: '复制步骤',
   historyExportDescription:
     '包含所有历史对话及本地图片原件；其他附件仅保留文件信息，不包含 API Key。',
   exportAllDownload: '下载',

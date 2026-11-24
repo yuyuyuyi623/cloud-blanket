@@ -172,6 +172,17 @@ export const en = {
     'Data lives only in this device\'s browser. On iPhone Safari, use it via "Share → Add to Home Screen", or the system may wipe it after 7 days of inactivity. Before switching devices or clearing browser data, export all chats first.',
   storageQuotaFull:
     'Local storage is full. Export all chats for backup first, then delete some old chats or large attachments.',
+  installRowTitle: 'Add to desktop',
+  installRowInstalled: 'Added to desktop',
+  installRowInstalledHint: 'Already running in its own window',
+  installIosStep1: 'Tap the "Share" button at the bottom of the browser (square with an arrow)',
+  installIosStep2: 'Choose "Add to Home Screen" in the menu',
+  installIosStep3: 'Tap "Add" to finish',
+  installIosNote: 'Once on the home screen, data will not be wiped by the system after 7 days',
+  installGenericStep1: 'Open the browser menu (≡ or ⋮)',
+  installGenericStep2: 'Look for "Add to desktop / Install app / Add to Home Screen"',
+  installGenericStep3: 'Tap "Confirm / Install" to finish',
+  installCopySteps: 'Copy steps',
   historyExportDescription:
     'Includes all chat history and locally stored images. Other attachments retain file details only. Your API Key is not included.',
   exportAllDownload: 'Download',

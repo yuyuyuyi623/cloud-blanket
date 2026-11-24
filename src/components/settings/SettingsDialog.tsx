@@ -18,6 +18,8 @@ import {
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { getStorageEstimate } from '../../services/storage.js'
+import { promptInstall, useInstallState, isIos } from '../../services/pwa/installPrompt.js'
+import { copyText } from '../../utils/clipboard.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
   isChineseBrowser,
@@ -110,6 +112,7 @@ const SettingsContent = () => {
               <ApiKeyField editor={apiKeyEditor} />
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
+              <InstallRow />
               <StorageUsage />
               <SettingCell
                 label={t('deleteAllSessions')}
@@ -639,5 +642,83 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
         </Button>
       }
     />
+  )
+}
+
+/** 「添加到桌面」三态入口（方案 §三）：可装→官方弹窗 / 已装→灰字 / 不支持→图文步骤 */
+const InstallRow = () => {
+  const t = useTranslate()
+  const available = useInstallState((state) => state.available)
+  const installed = useInstallState((state) => state.installed)
+  const [stepsOpen, setStepsOpen] = useState(false)
+
+  if (installed) {
+    return (
+      <div className={styles.cell}>
+        <div className={styles.row}>
+          <div className={styles.text}>
+            <div className={styles.label}>{t('installRowInstalled')}</div>
+            <div className={styles.description}>{t('installRowInstalledHint')}</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <SettingCell
+        label={t('installRowTitle')}
+        status={null}
+        action={
+          <Button
+            variant="outlined"
+            size="m"
+            className={styles.cellButton}
+            onClick={() => {
+              if (available) {
+                void promptInstall()
+              } else {
+                setStepsOpen(true)
+              }
+            }}
+          >
+            {t('installRowTitle')}
+          </Button>
+        }
+      />
+      {stepsOpen ? <InstallStepsDialog onClose={() => setStepsOpen(false)} /> : null}
+    </>
+  )
+}
+
+/** 浏览器不支持程序化安装（iOS / 夸克等）时的图文步骤，按平台给内容 */
+const InstallStepsDialog = ({ onClose }: { onClose: () => void }) => {
+  const t = useTranslate()
+  const ios = isIos()
+  const stepKeys = ios
+    ? (['installIosStep1', 'installIosStep2', 'installIosStep3'] as const)
+    : (['installGenericStep1', 'installGenericStep2', 'installGenericStep3'] as const)
+  const steps = stepKeys.map((key, index) => `${index + 1}. ${t(key)}`)
+
+  return (
+    <Modal title={t('installRowTitle')} onClose={onClose} closable>
+      <ol className={styles.installSteps}>
+        {steps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+      {ios ? <p className={styles.installNote}>{t('installIosNote')}</p> : null}
+      <Button
+        size="s"
+        onClick={() => {
+          void copyText(steps.join('\n')).then((ok) => {
+            showToast(ok ? { key: 'copied' } : { key: 'copyFailed', type: 'error' })
+          })
+        }}
+      >
+        {t('installCopySteps')}
+      </Button>
+    </Modal>
   )
 }

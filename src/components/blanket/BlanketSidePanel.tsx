@@ -18,7 +18,7 @@ import {
   TRASH_DAYS,
   useBlankets,
 } from '../../services/memory/blanketStore.js'
-import { IconBookOutline16, IconCopyOutline16, IconUserOutline16 } from '../base/icons.js'
+import { IconBookOutline16, IconCloudOutline16, IconCopyOutline16, IconUserOutline16 } from '../base/icons.js'
 import { showToast } from '../base/toastState.js'
 import { copyText } from '../../utils/clipboard.js'
 import { buildErrorLogText } from '../../services/diagnostics/errorLog.js'
@@ -61,7 +61,7 @@ export const BlanketSidePanel = () => {
         aria-label={t('blanketPanelOpen')}
         onClick={() => setOpen((value) => !value)}
       >
-        <IconUserOutline16 />
+        <IconCloudOutline16 />
       </button>
 
       {open ? (

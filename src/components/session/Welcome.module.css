@@ -66,3 +66,29 @@
     user-select: none;
   }
 }
+
+/* ── 手机端文字链接（随便聊聊 / 新手指引）：小字、暖棕、像链接不像卡片 ── */
+
+.mobileLinks {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 14px 0 16px;
+}
+
+.mobileLink {
+  border: none;
+  background: none;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-brand-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.mobileLink:active {
+  opacity: 0.6;
+}
