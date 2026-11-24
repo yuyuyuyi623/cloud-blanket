@@ -138,11 +138,13 @@ export const SUMMARY_MAX_TOKENS = 4000;
 /** 蒸馏调用 4000（清单第九节：蒸馏同样遵守 G1~G3） */
 export const DISTILL_MAX_TOKENS = 4000;
 /**
- * 蒸馏汇总调用 8192：汇总要一次吐 persona 2000 字 + 摘要 2000 字 + core 候选 10×120 字
- * + facts 30×200 字，最坏 ≈ 9000 字 ≈ 6300 token，4000 会截断（G3 截断 = 记忆缺一块）。
+ * 蒸馏汇总调用 65536（Flash 输出上限）：汇总要一次吐 persona 2000 字 + 摘要 2000 字
+ * + core 候选 10×120 字 + facts 30×200 字，最坏 ≈ 9000 字 ≈ 6300 token——4000 必截断，
+ * 8192 对超长账号也贴边。提到上限值，只按实际用量计费，不给足上限不多花钱
+ * （G3：截断 warn 留痕仍在，真截断会暴露而不是隐形）。
  * 预估页公式仍按 4000 展示（实际按用量计费，差异几分钱内）。
  */
-export const DISTILL_SUMMARIZE_MAX_TOKENS = 8192;
+export const DISTILL_SUMMARIZE_MAX_TOKENS = 65536;
 /** 日常对话输出 4096（K4：说到一半断掉，用户会以为"她不想说了"） */
 export const CHAT_MAX_TOKENS = 4096;
 /** 整合 temperature 0.1（G4） */

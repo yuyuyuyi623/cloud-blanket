@@ -85,7 +85,12 @@ export const createConfig = ({
       __APP_VERSION__: JSON.stringify(version),
     }),
     new rspack.CopyRspackPlugin({
-      patterns: [{ from: path.resolve(root, 'LICENSE'), to: 'LICENSE', toType: 'file' }],
+      patterns: [
+        { from: path.resolve(root, 'LICENSE'), to: 'LICENSE', toType: 'file' },
+        // PWA：manifest 与图标平铺进 dist 根（图标含 apple-touch-icon 180，iOS 加主屏用）
+        { from: path.resolve(root, 'public/manifest.webmanifest'), to: 'manifest.webmanifest', toType: 'file' },
+        { from: path.resolve(root, 'public/icons'), to: 'icons' },
+      ],
     }),
   ],
   performance: { hints: false },

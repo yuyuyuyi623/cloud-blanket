@@ -1,4 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
+import { translate } from '../../i18n/index.js'
+import { showToast } from '../../components/base/toastState.js'
 import type { BlanketRecord } from '../memory/blanket.js'
 import { toSessionSummary, type Session, type SessionSummary } from './types.js'
 
@@ -80,6 +82,7 @@ const abortTransaction = (tx: { abort(): void }) => {
 // 每个操作拿到连接后立即创建事务；IndexedDB 按创建顺序执行范围重叠的事务，读取总能看到之前发起的写入。
 const getDB = () =>
   (dbPromise ??= openDB<ChatDB>('chat-demo', DB_VERSION, {
+
     upgrade(db, _oldVersion, _newVersion, tx) {
       // 初始化当前格式需要的存储与索引，不迁移旧消息。
       for (const name of [
@@ -112,13 +115,35 @@ const getDB = () =>
     throw error
   }))
 
+// ── 配额写满兜底（存储加固 2026-11-24）──────────────────────
+// IndexedDB 写入全部从本文件出去，所以只在这里包一层：捕获 QuotaExceededError
+// 弹会话内提示（不 alert），然后原样上抛让调用方的既定错误路径（如失败重试、状态提示）照常走。
+
+const isQuotaError = (error: unknown): boolean => {
+  const e = error as { name?: string; message?: string } | null
+  return Boolean(
+    e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message ?? '')))
+  )
+}
+
+const rethrowQuota = (error: unknown): never => {
+  if (isQuotaError(error)) {
+    showToast(translate('storageQuotaFull'))
+  }
+  throw error
+}
+
+/** 大对象写入统一过这道闸（读取不拦；小写如改名/软删不会碰配额，不过闸） */
+const guarded = <Args extends unknown[], R>(fn: (...args: Args) => Promise<R>) =>
+  (...args: Args): Promise<R> => fn(...args).catch(rethrowQuota)
+
 export const loadSessionSummaries = async (): Promise<SessionSummary[]> =>
   (await (await getDB()).getAll('sessionSummaries')).map(toSessionSummary)
 
 export const loadSession = async (id: string): Promise<Session | undefined> =>
   (await getDB()).get('sessions', id)
 
-export const saveSession = async (session: Session, files: StoredFile[] = []): Promise<void> => {
+export const saveSession = guarded(async (session: Session, files: StoredFile[] = []): Promise<void> => {
   const summary = storedSummary(session)
   const tx = (await getDB()).transaction(['sessions', 'sessionSummaries', 'files'], 'readwrite')
   await Promise.all([
@@ -136,7 +161,7 @@ export const saveSession = async (session: Session, files: StoredFile[] = []): P
     })(),
     tx.done,
   ])
-}
+})
 
 /** 未打开的会话也可重命名，只读取该会话，原子更新详情和列表。 */
 export const renameSession = async (id: string, title: string): Promise<void> => {
@@ -222,7 +247,7 @@ const putFiles = async (store: 'files' | 'filesStaging', files: StoredFile[]) =>
   await Promise.all([...files.map((file) => tx.store.put(file)), tx.done])
 }
 
-export const saveFiles = (files: StoredFile[]): Promise<void> => putFiles('files', files)
+export const saveFiles = guarded((files: StoredFile[]): Promise<void> => putFiles('files', files))
 
 export const loadFile = async (id: string): Promise<Blob | undefined> =>
   (await (await getDB()).get('files', id))?.blob
@@ -237,12 +262,13 @@ export const clearStaging = async (): Promise<void> => {
   ])
 }
 
-export const addStagingSession = async (session: Session): Promise<void> => {
+export const addStagingSession = guarded(async (session: Session): Promise<void> => {
   await (await getDB()).add('sessionsStaging', session)
-}
+})
 
-export const saveStagingFiles = (files: StoredFile[]): Promise<void> =>
+export const saveStagingFiles = guarded((files: StoredFile[]): Promise<void> =>
   putFiles('filesStaging', files)
+)
 
 /** 图片位于会话 JSON 之后；全部读完后回填具体 MIME，保留归档给出的 isImage 标识。 */
 export const updateStagingFileTypes = async (types: ReadonlyMap<string, string>): Promise<void> => {
@@ -277,7 +303,7 @@ export const updateStagingFileTypes = async (types: ReadonlyMap<string, string>)
  * 导入完成后用暂存替换正式数据：同一事务中替换会话、摘要和原件，并清空暂存。
  * 逐条游标复制，同一时间只读取一条记录；事务失败时整体回滚，正式数据不变。
  */
-export const commitStaging = async (): Promise<SessionSummary[]> => {
+export const commitStaging = guarded(async (): Promise<SessionSummary[]> => {
   const summaries: SessionSummary[] = []
   const tx = (await getDB()).transaction(
     ['sessions', 'sessionSummaries', 'files', 'sessionsStaging', 'filesStaging'],
@@ -312,7 +338,7 @@ export const commitStaging = async (): Promise<SessionSummary[]> => {
   await Promise.all([move('sessionsStaging', 'sessions'), move('filesStaging', 'files'), tx.done])
   // 直接返回本次提交的列表，调用方无需在替换成功后再发起可能失败的读取。
   return summaries
-}
+})
 
 // ── 云朵被子 ──────────────────────────────────────────────────
 
@@ -323,9 +349,9 @@ export const loadBlankets = async (): Promise<BlanketRecord[]> =>
 export const loadBlanket = async (id: string): Promise<BlanketRecord | undefined> =>
   (await getDB()).get('blankets', id)
 
-export const saveBlanket = async (blanket: BlanketRecord): Promise<void> => {
+export const saveBlanket = guarded(async (blanket: BlanketRecord): Promise<void> => {
   await (await getDB()).put('blankets', blanket)
-}
+})
 
 /** 只删被子本身；被蒸的那些会话属于官方数据，由用户在会话列表里自己删 */
 export const deleteBlanket = async (id: string): Promise<void> => {
@@ -340,24 +366,23 @@ export const deleteBlanket = async (id: string): Promise<void> => {
 }
 
 /** 写入/覆盖一床被子的原料会话（重蒸时整组替换由调用方先清空） */
-export const saveBlanketSessions = async (
-  blanketId: string,
-  sessions: Session[]
-): Promise<void> => {
-  const db = await getDB()
-  const tx = db.transaction('blanketSessions', 'readwrite')
-  await Promise.all([
-    ...sessions.map((session) =>
-      tx.objectStore('blanketSessions').put({
-        id: blanketSessionKey(blanketId, session.id),
-        blanketId,
-        sessionId: session.id,
-        session,
-      })
-    ),
-    tx.done,
-  ])
-}
+export const saveBlanketSessions = guarded(
+  async (blanketId: string, sessions: Session[]): Promise<void> => {
+    const db = await getDB()
+    const tx = db.transaction('blanketSessions', 'readwrite')
+    await Promise.all([
+      ...sessions.map((session) =>
+        tx.objectStore('blanketSessions').put({
+          id: blanketSessionKey(blanketId, session.id),
+          blanketId,
+          sessionId: session.id,
+          session,
+        })
+      ),
+      tx.done,
+    ])
+  }
+)
 
 export const loadBlanketSession = async (
   blanketId: string,

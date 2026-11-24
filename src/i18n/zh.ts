@@ -160,6 +160,12 @@ export const zh = {
     '文件导入失败，可能是文件格式错误或使用了旧版的对话导出 ZIP 文件，请前往 DeepSeek 重新导出历史对话文件后再次导入。',
   historyExportFailed: '导出失败：{message}',
   exportAllLabel: '导出所有历史对话',
+  storageUsageLabel: '本地存储占用',
+  storageUsageText: '本地占用 {usage} MB / 可用约 {quota} MB',
+  storageSafetyHint:
+    '数据只存在本设备浏览器里。iPhone 用 Safari 时，请通过「分享 → 添加到主屏幕」使用，否则 7 天不用可能被系统清理；换设备或清缓存前，先「导出所有历史对话」。',
+  storageQuotaFull:
+    '本地存储空间已满，请先「导出所有历史对话」备份，再删除部分旧对话或大附件。',
   historyExportDescription:
     '包含所有历史对话及本地图片原件；其他附件仅保留文件信息，不包含 API Key。',
   exportAllDownload: '下载',

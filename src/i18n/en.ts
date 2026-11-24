@@ -166,6 +166,12 @@ export const en = {
     'File import failed. The file format may be invalid, or the ZIP file may use an older chat export format. Please export your chat history from DeepSeek again and retry the import.',
   historyExportFailed: 'Export failed: {message}',
   exportAllLabel: 'Export all chats',
+  storageUsageLabel: 'Local storage usage',
+  storageUsageText: '{usage} MB used / about {quota} MB available',
+  storageSafetyHint:
+    'Data lives only in this device\'s browser. On iPhone Safari, use it via "Share → Add to Home Screen", or the system may wipe it after 7 days of inactivity. Before switching devices or clearing browser data, export all chats first.',
+  storageQuotaFull:
+    'Local storage is full. Export all chats for backup first, then delete some old chats or large attachments.',
   historyExportDescription:
     'Includes all chat history and locally stored images. Other attachments retain file details only. Your API Key is not included.',
   exportAllDownload: 'Download',

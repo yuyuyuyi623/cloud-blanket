@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, useEffect, type ReactNode } from 'react'
 import {
   IconDarkOutline16,
   IconDataOutline16,
@@ -17,6 +17,7 @@ import {
 } from '../../services/chat/backup.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
+import { getStorageEstimate } from '../../services/storage.js'
 import { regionCodes, getRegionName, provinces } from '../../services/location.js'
 import {
   isChineseBrowser,
@@ -109,6 +110,7 @@ const SettingsContent = () => {
               <ApiKeyField editor={apiKeyEditor} />
               <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
+              <StorageUsage />
               <SettingCell
                 label={t('deleteAllSessions')}
                 status={null}
@@ -558,6 +560,39 @@ const ImportHistory = ({
         </>
       }
     />
+  )
+}
+
+/** 本地存储占用 + 数据安全提示（存储加固 2026-11-24）：打开数据管理页时刷一次；estimate 不可用则整块不显示 */
+const StorageUsage = () => {
+  const t = useTranslate()
+  const [estimate, setEstimate] = useState<{ usage: number; quota: number } | null>(null)
+
+  useEffect(() => {
+    void getStorageEstimate().then((result) => {
+      if (result) {
+        setEstimate({ usage: result.usage, quota: result.quota })
+      }
+    })
+  }, [])
+
+  if (!estimate) {
+    return null
+  }
+  const mb = (bytes: number) => (bytes / 1024 / 1024).toFixed(1)
+
+  return (
+    <div className={styles.cell}>
+      <div className={styles.row}>
+        <div className={styles.text}>
+          <div className={styles.label}>{t('storageUsageLabel')}</div>
+          <div className={styles.description}>
+            {t('storageUsageText', { usage: mb(estimate.usage), quota: mb(estimate.quota) })}
+          </div>
+        </div>
+      </div>
+      <div className={clsx(styles.description, styles.safetyHint)}>{t('storageSafetyHint')}</div>
+    </div>
   )
 }
 
