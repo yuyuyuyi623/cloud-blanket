@@ -17,6 +17,7 @@ import {
   useChatStore,
 } from '../../services/chat/store.js'
 import { openBlanketImport } from '../../services/memory/importState.js'
+import { useBlankets } from '../../services/memory/blanketStore.js'
 import { BlanketList } from '../blanket/BlanketList.js'
 import { IconButton } from '../base/IconButton.js'
 import { showToast } from '../base/toastState.js'
@@ -33,7 +34,22 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
   const trashedCount = useChatStore((state) => state.trashedSessions.length)
   const activeId = useChatStore((state) => state.activeId)
   const [now, setNow] = useState(Date.now)
-  const groups = useMemo(() => groupSessions(sessions, now, t), [sessions, now, t])
+  // 会话 id → 绑在它上面的被子：这些对话不进普通列表（入口就是"我的被子"那一行）
+  const blankets = useBlankets((state) => state.list)
+  const blanketBySession = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>()
+    for (const item of blankets) {
+      if (item.deletedAt === undefined && item.chatSessionId) {
+        map.set(item.chatSessionId, { id: item.id, name: item.name })
+      }
+    }
+    return map
+  }, [blankets])
+  const plainSessions = useMemo(
+    () => sessions.filter((session) => !blanketBySession.has(session.id)),
+    [sessions, blanketBySession],
+  )
+  const groups = useMemo(() => groupSessions(plainSessions, now, t), [plainSessions, now, t])
   const [trashOpen, setTrashOpen] = useState(false)
 
   useEffect(() => {
@@ -113,23 +129,28 @@ export const Sider = ({ mobile = false }: { mobile?: boolean }) => {
           {groups.map((group) => (
             <div key={group.key} className={styles.section}>
               <div className={styles.sectionHeader}>{group.label}</div>
-              {group.sessions.map((session) => (
-                <SessionItem
-                  key={session.id}
-                  session={session}
-                  active={session.id === activeId}
-                  onDelete={() => {
-                    // 软删进回收站：不用确认框拦截，30 天内随时可找回
-                    void trashSession(session.id).then((ok) => {
-                      if (ok) {
-                        showToast(t('sessionTrashedToast'))
-                      } else {
-                        showToast({ key: 'sessionDeleteFailed', type: 'error' })
-                      }
-                    })
-                  }}
-                />
-              ))}
+              {group.sessions.map((session) => {
+                const blanket = blanketBySession.get(session.id)
+                return (
+                  <SessionItem
+                    key={session.id}
+                    session={session}
+                    active={session.id === activeId}
+                    blanketId={blanket?.id}
+                    blanketName={blanket?.name}
+                    onDelete={() => {
+                      // 软删进回收站：不用确认框拦截，30 天内随时可找回
+                      void trashSession(session.id).then((ok) => {
+                        if (ok) {
+                          showToast(t('sessionTrashedToast'))
+                        } else {
+                          showToast({ key: 'sessionDeleteFailed', type: 'error' })
+                        }
+                      })
+                    }}
+                  />
+                )
+              })}
             </div>
           ))}
         </div>

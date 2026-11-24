@@ -366,5 +366,8 @@ export const en = {
   blanketDetailDelete: 'Delete this blanket',
   blanketDetailDeleteConfirm: 'Delete',
   blanketDetailDeleteHint:
-    'Deleting removes this memory; the chats themselves stay in your own conversations.',
+    'Deleting removes this memory, and its chat goes to the trash too (recoverable for 30 days).',
+  sessionItemDeleteBlanket: 'Delete blanket "{name}"',
+  sessionItemBlanketMark: 'This chat belongs to "{name}" — delete the blanket here',
+  blanketRemovedToast: '"{name}" and its chat moved to trash — recoverable for 30 days',
 } satisfies Record<keyof typeof zh, string>

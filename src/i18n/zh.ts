@@ -358,5 +358,9 @@ export const zh = {
   blanketEditItemPlaceholder: '写点什么……',
   blanketDetailDelete: '删掉这床被子',
   blanketDetailDeleteConfirm: '确认删除',
-  blanketDetailDeleteHint: '删掉后这份记忆会消失；那些聊天记录仍在你自己的对话里，不受影响。',
+  blanketDetailDeleteHint:
+    '删掉后这份记忆会消失，和她的对话也会一起放进回收站（30 天内可恢复）。',
+  sessionItemDeleteBlanket: '删除被子「{name}」',
+  sessionItemBlanketMark: '这是「{name}」的对话，删被子就在这里删',
+  blanketRemovedToast: '「{name}」和它的对话一起放进回收站了，30 天内可恢复',
 } as const

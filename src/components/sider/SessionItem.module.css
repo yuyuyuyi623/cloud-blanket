@@ -31,12 +31,30 @@
 }
 
 .title {
+  display: flex;
   flex: 1;
+  align-items: center;
+  gap: 5px;
   min-width: 0;
+}
+
+.titleText {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   line-height: 18px;
+}
+
+/* 被子对话的云朵标记：一眼看出这条对话跟某床被子是一体的 */
+.blanketMark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  color: var(--dsw-alias-brand-primary);
+}
+
+.item.active .blanketMark {
+  color: inherit;
 }
 
 .action {
