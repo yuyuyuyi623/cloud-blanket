@@ -4,7 +4,7 @@
 
 把官方导出的 DeepSeek 聊天记录，蒸成一床"被子"——一个带着 TA 的记忆和说话味道的对话伙伴。纯静态网页 + 你自己的 API Key，零后端、零部署，点开链接就能用。
 
-**在线使用**：[点开链接即可](https://cloud-blanket-guide.app.workbuddy.host/?sharecode=JJTR3C5HZL) · **新手图文教程（17 图）**：[tutorial](https://cloud-blanket-guide.app.workbuddy.host/tutorial/?sharecode=JJTR3C5HZL)
+**在线使用**：[点开链接即可](https://yuyuyuyi623.github.io/cloud-blanket/) · **新手图文教程（17 图）**：[tutorial](https://yuyuyuyi623.github.io/cloud-blanket/tutorial/)
 
 ## 它是什么
 

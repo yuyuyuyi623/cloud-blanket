@@ -4,7 +4,7 @@
 
 Turn a DeepSeek chat export into a "blanket": a chat companion that carries someone's memories and way of speaking. A pure static web app, your own API key, no backend, no deployment — just open the link.
 
-**Online:** [open the app](https://cloud-blanket-guide.app.workbuddy.host/?sharecode=JJTR3C5HZL) · **Illustrated tutorial (17 screenshots, Chinese):** [tutorial](https://cloud-blanket-guide.app.workbuddy.host/tutorial/?sharecode=JJTR3C5HZL)
+**Online:** [open the app](https://yuyuyuyi623.github.io/cloud-blanket/) · **Illustrated tutorial (17 screenshots, Chinese):** [tutorial](https://yuyuyuyi623.github.io/cloud-blanket/tutorial/)
 
 ## What it does
 
