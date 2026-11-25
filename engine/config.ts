@@ -69,10 +69,20 @@ export const EPISODE_BANDS = 3;
 export const EPISODES_CHARS = 120;
 /** 每次整合模型最多产 5 条新事件（N3），不是重写全部 */
 export const NEW_EPISODES_PER_RUN = 5;
-/** 整体印象 impression 存储截断 80 字（十·2） */
-export const IMPRESSION_CHARS = 80;
-/** impression 的提示词约束 40 字（十·2，提示词约束与存储截断是两个数） */
-export const IMPRESSION_PROMPT_CHARS = 40;
+/**
+ * 整体印象 impression 存储截断 120 字（2026-11-25 拍板 B1：原 80）。
+ *
+ * 每轮都渲染进稳定段（常驻成本），所以 120 是"写两三句近况"与"别让它变成段落"的折中；
+ * 160 的边际收益远小于模型"越写越长"的倾向，先 120 观察，不够再抬。
+ */
+export const IMPRESSION_CHARS = 120;
+/**
+ * impression 的提示词目标字数 100（B1：与存储截断**故意不同**）。
+ *
+ * 两个都设 120，模型写 118~120 字时必然贴着上限，多一个字就被截在半句上——
+ * 正好截在"整体印象"这种最怕断句的字段。prompt 100 / 存 120，留 20 字缓冲，两不相撞。
+ */
+export const IMPRESSION_PROMPT_CHARS = 100;
 /** 滚动摘要上限：K3 从柔光 1000 放宽到 2000 字 */
 export const SUMMARY_MAX_CHARS = 2000;
 /**

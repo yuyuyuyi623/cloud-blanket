@@ -14,6 +14,7 @@ import {
 } from '../src/services/memory/consolidationRunner.js'
 import type { Session } from '../src/services/chat/types.js'
 import type { MemoryPack } from '../engine/pack.js'
+import { IMPRESSION_CHARS, IMPRESSION_PROMPT_CHARS } from '../engine/config.js'
 
 /** 造一个最小可用的会话：每条消息 10 字，交替 user/assistant */
 const makeSession = (count: number, charsPerMessage = 10): Session =>
@@ -165,5 +166,24 @@ describe('整体印象（半生长区，四·附）', () => {
     const result = mergeConsolidation(pack, {}, new Date(), { impressionAuto: true })
     expect(result.impressionUpdated).toBe(false)
     expect(result.pack.persona.impression).toBe('旧的')
+  })
+})
+
+describe('B1 印象字数（2026-11-25 拍板：prompt 100 / 存 120）', () => {
+  it('存 120：超长印象截断到 IMPRESSION_CHARS，不留半句以上的垃圾', () => {
+    const pack = makePack()
+    const result = mergeConsolidation(
+      pack,
+      { impression: '好'.repeat(300) },
+      new Date(),
+      { impressionAuto: true }
+    )
+    expect(result.pack.persona.impression).toHaveLength(IMPRESSION_CHARS)
+  })
+
+  it('prompt 目标字数必须小于存储截断（留缓冲，两者不许同一个数）', () => {
+    expect(IMPRESSION_PROMPT_CHARS).toBe(100)
+    expect(IMPRESSION_CHARS).toBe(120)
+    expect(IMPRESSION_PROMPT_CHARS).toBeLessThan(IMPRESSION_CHARS)
   })
 })

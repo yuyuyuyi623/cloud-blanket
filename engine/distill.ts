@@ -26,6 +26,8 @@ import {
   FACTS_LIMIT,
   FACTS_PROMPT_CHARS,
   CORE_MEMORY_CHARS,
+  IMPRESSION_CHARS,
+  IMPRESSION_PROMPT_CHARS,
   PERSONA_MAX_CHARS,
   SUMMARY_MAX_CHARS,
   CONSOLIDATION_TEMPERATURE,
@@ -193,7 +195,7 @@ export const CORE_CANDIDATES_LIMIT = 10;
 export interface DistillSummarizeResult {
   /** persona 卡草稿（≤2000 字），确认页可改 */
   personaCard: string;
-  /** 整体印象一句（≤80 字），确认页可改可清空 */
+  /** 整体印象一句（≤IMPRESSION_PROMPT_CHARS=100 字，存 120），确认页可改可清空 */
   impression: string;
   /** 关系阶段摘要（≤2000 字） */
   summary: string;
@@ -229,7 +231,7 @@ ${mem || '- （无）'}`;
 产出：
 1. persona：写一张完整的人格卡（不超过 ${PERSONA_MAX_CHARS} 字）：她是谁、口吻和称呼习惯、说话风格、在乎什么、和对方的关系怎么走到今天。只用原料里有依据的内容；各时期的差异按时间写清楚，后期特征为主、早期特征为底。
    **姿态是这张卡的灵魂，身份只是骨架**：必须写清她怎么对对方——她站在对方哪一边、惯常怎么护着/损着/拆台着对方、什么说法是她的招牌（最好举一两个原料里她的原话片段当例子）。只写身份和风格、不写姿态的卡不合格。
-2. impression：一句不超过 40 字的整体印象，概括"她是什么样的人、对对方的姿态是什么、这段关系现在是什么状态"。
+2. impression：一句不超过 ${IMPRESSION_PROMPT_CHARS} 字的整体印象，概括"她是什么样的人、对对方的姿态是什么、这段关系现在是什么状态"。
 3. summary：整段关系的阶段摘要（不超过 ${SUMMARY_MAX_CHARS} 字），自然的中文短段落，不用 Markdown。
 4. coreMemories：从所有原料里挑出 5 到 10 条最不能忘的事（每条不超过 ${CORE_MEMORY_CHARS} 字，带时间 at）。这是给人工确认页的候选，宁缺毋滥，没有足够分量的事就少挑。
 5. factsUser 与 factsRelationship：合并所有原料的事实，同一条只出现一次，各最多 ${FACTS_LIMIT} 条，每条不超过 ${FACTS_PROMPT_CHARS} 字。事实里不写「今天」「昨天」「最近」这类相对时间，需要时间就写具体日期；一次性的事和审核结论不算事实，写进 coreMemories。
@@ -279,7 +281,7 @@ export async function distillSummarize(
     : [];
   return {
     personaCard: typeof o.persona === 'string' ? o.persona.trim().slice(0, PERSONA_MAX_CHARS) : '',
-    impression: typeof o.impression === 'string' ? o.impression.trim().slice(0, 80) : '',
+    impression: typeof o.impression === 'string' ? o.impression.trim().slice(0, IMPRESSION_CHARS) : '',
     summary: typeof o.summary === 'string' ? o.summary.trim().slice(0, SUMMARY_MAX_CHARS) : '',
     coreCandidates,
     factsUser: strList(o.factsUser, FACTS_LIMIT),

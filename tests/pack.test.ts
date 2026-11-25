@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { characterJaccard, isRoughOverwrite } from '../engine/jaccard.js';
 import {
   CORE_MEMORY_LIMIT,
+  IMPRESSION_CHARS,
   EPISODES_LIMIT,
   EPISODES_PINNED_EARLIEST,
   FACTS_LIMIT,
@@ -149,9 +150,9 @@ describe('normalizePack / deserializePack（整包）', () => {
     expect((pack as unknown as Record<string, unknown>).unknownTopLevel).toBeUndefined();
   });
 
-  it('impression 截断 80 字（十·2）', () => {
+  it('impression 截断到 IMPRESSION_CHARS（B1：120）', () => {
     const pack = normalizePack({ persona: { impression: '好'.repeat(200) } });
-    expect(pack.persona.impression).toHaveLength(80);
+    expect(pack.persona.impression).toHaveLength(IMPRESSION_CHARS);
   });
 
   it('diary 非法条目丢弃', () => {
