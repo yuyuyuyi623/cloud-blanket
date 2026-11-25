@@ -112,15 +112,16 @@ export class BlanketMemory {
   /**
    * 本轮检索 → 动态段。
    * 管线（交接文档 §四）：改写层 → searchMemory 三路降级 → budgetSearchResults → 动态段。
+   * seedBridged：本轮注入了续接历史时，动态段末尾加一行桥接语（防"你刚刚说的那个"）。
    */
-  retrieve(userText: string): BlanketRetrieval {
+  retrieve(userText: string, options: { seedBridged?: boolean } = {}): BlanketRetrieval {
     const text = userText.trim()
     if (!text) {
-      return { dynamic: buildDynamicSegment([]), results: [], mode: 'empty' }
+      return { dynamic: buildDynamicSegment([], options), results: [], mode: 'empty' }
     }
     const { results, mode } = searchMemory(this.index, text)
     const budgeted = budgetSearchResults(results)
-    return { dynamic: buildDynamicSegment(budgeted.used), results: budgeted.used, mode }
+    return { dynamic: buildDynamicSegment(budgeted.used, options), results: budgeted.used, mode }
   }
 
   stats(): { docs: number; terms: number; sessions: number } {

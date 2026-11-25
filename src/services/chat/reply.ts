@@ -375,19 +375,33 @@ export const estimateMessageTokens = (message: MessageParam): number =>
 /**
  * 从最近一轮往回装（文档 §10.4 第 2 条：装不下就停，不是装完再裁——裁完会剩半轮对话）。
  * 一轮装不下就整轮不进；轮数同时受 MAX_HISTORY_ROUNDS 约束。
+ * seed（续接历史）是最老的一段：预算不够先丢它，从最老一条开始丢（方案 §4.3）。
  */
 const limitRoundsByBudget = (
   groups: MessageParam[][],
   question: MessageParam,
   prefix: MessageParam | undefined,
-  budget: HistoryBudget
-): MessageParam[][] => {
+  budget: HistoryBudget,
+  seed: MessageParam[]
+): { kept: MessageParam[][]; seed: MessageParam[] } => {
   const total = budget.budgetTokens ?? Math.floor(CONTEXT_BUDGET_TOKENS * CONTEXT_BUDGET_SAFETY_RATIO)
+  const costOf = (list: MessageParam[]) =>
+    list.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
   const fixed =
     budget.reservedTokens +
     estimateMessageTokens(question) +
     (prefix ? estimateMessageTokens(prefix) : 0)
-  const available = total - fixed
+  let available = total - fixed
+
+  const seedKept = [...seed]
+  while (seedKept.length > 0 && costOf(seedKept) > available) {
+    seedKept.shift()
+  }
+  // 头部落在 assistant 上服务端会 400：连着丢到 user 为止
+  while (seedKept[0]?.role === 'assistant') {
+    seedKept.shift()
+  }
+  available -= costOf(seedKept)
 
   const kept: MessageParam[][] = []
   let used = 0
@@ -396,14 +410,14 @@ const limitRoundsByBudget = (
       break
     }
     const group = groups[i]
-    const cost = group.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
+    const cost = costOf(group)
     if (used + cost > available) {
       break
     }
     kept.unshift(group)
     used += cost
   }
-  return kept
+  return { kept, seed: seedKept }
 }
 
 /**
@@ -421,7 +435,8 @@ export const toRequestMessages = (
   question: UserMessage,
   prefix?: AssistantMessage,
   latestReminder?: string,
-  budget?: HistoryBudget
+  budget?: HistoryBudget,
+  seedTurns?: readonly { role: 'user' | 'assistant'; text: string }[]
 ): MessageParam[] => {
   // 一轮一组：提醒快照跟着它所属的那一轮走，裁轮次时一起进一起出
   const groups: MessageParam[][] = []
@@ -443,10 +458,22 @@ export const toRequestMessages = (
   // 没有非空白正文时直接重发原问题，避免服务端拒绝空前缀。
   const usablePrefix = prefixParam?.content.trim() ? prefixParam : undefined
 
-  const kept = budget
-    ? limitRoundsByBudget(groups, questionParam, usablePrefix, budget)
-    : groups
-  const messages: MessageParam[] = []
+  // 续接历史（v1.0.2 层二）：原封拼在真实历史前面，是最老的一段——预算不够时先丢它。
+  // 头部落在 assistant 上服务端会 400，无论裁不裁都先对齐到 user。
+  const seedParams: MessageParam[] = (seedTurns ?? []).map((t) => ({ role: t.role, content: t.text }))
+  while (seedParams[0]?.role === 'assistant') {
+    seedParams.shift()
+  }
+
+  let kept = groups
+  let seedKept = seedParams
+  if (budget) {
+    const limited = limitRoundsByBudget(groups, questionParam, usablePrefix, budget, seedParams)
+    kept = limited.kept
+    seedKept = limited.seed
+  }
+
+  const messages: MessageParam[] = [...seedKept]
   let previousReminder: string | undefined
   const appendReminder = (reminder: string | undefined) => {
     // 仅在当前分支首次出现或内容变化时插入快照；缺少快照的消息保持原有内容。

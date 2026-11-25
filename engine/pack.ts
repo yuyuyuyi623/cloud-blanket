@@ -22,10 +22,12 @@ import {
   SAMPLES_MAX_CHARS,
   SAMPLES_QUOTE_CHARS,
   SAMPLES_USER_QUOTE_CHARS,
+  SEED_TURNS_ROUNDS,
   SUMMARY_MAX_CHARS,
   TEXT_OVERFLOW_RATIO,
 } from './config.js';
 import { softClip } from './brief.js';
+import { redactSensitive } from './redact.js';
 
 // ── 类型 ─────────────────────────────────────────────────────
 
@@ -105,6 +107,21 @@ export interface MemoryPack {
    * 唯一合法来源是原始导出包里的 assistant 消息；被子对话不补样本（红线，见方案 §③）。
    */
   voiceSamples?: VoiceSample[];
+  /**
+   * 续接历史（v1.0.2 层二，A6）：蒸馏时从原料末尾原封截取的 12 轮。
+   *
+   * **不落持久消息**：每次请求拼在历史前面，随真实对话单调退场（方案 §4.1/§4.3）。
+   * 落进消息表会污染巩固水位、FTS 索引、导出与账本。
+   */
+  seedTurns?: SeedTurn[];
+}
+
+/** 一条原封续接消息（一字不改，只允许脱敏替换） */
+export interface SeedTurn {
+  role: 'user' | 'assistant';
+  text: string;
+  /** 原时间戳，桥接语与确认页用 */
+  at?: string | null;
 }
 
 // ── 内部工具 ─────────────────────────────────────────────────
@@ -348,6 +365,28 @@ export function normalizeVoiceSamples(raw: unknown): VoiceSample[] {
   return out;
 }
 
+/**
+ * 续接历史（A6）：
+ * - role 只认 user/assistant，text 为空的行丢弃；
+ * - 条数上限 SEED_TURNS_ROUNDS×2，**留末尾**（最近的那几轮才是"上次聊到哪"）；
+ * - 一律过 redactSensitive：seed 不过模型，prompt 里的敏感条款管不到它（真缺口，方案 §4.5）。
+ *   脱敏幂等，所以 normalize 多跑几次结果不变。
+ */
+export function normalizeSeedTurns(raw: unknown): SeedTurn[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SeedTurn[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const role = o.role === 'user' || o.role === 'assistant' ? o.role : null;
+    const text = typeof o.text === 'string' ? redactSensitive(o.text.trim()) : '';
+    if (!role || !text) continue;
+    out.push({ role, text, at: normalizeAt(o.at) });
+  }
+  const limit = SEED_TURNS_ROUNDS * 2;
+  return out.length > limit ? out.slice(-limit) : out;
+}
+
 function normalizeDiary(raw: unknown): DiaryEntry[] {  if (!Array.isArray(raw)) return [];
   const out: DiaryEntry[] = [];
   for (const item of raw) {
@@ -394,6 +433,7 @@ export function normalizePack(raw: unknown): MemoryPack {
         : '',
     diary: normalizeDiary(o.diary),
     voiceSamples: normalizeVoiceSamples(o.voiceSamples),
+    seedTurns: normalizeSeedTurns(o.seedTurns),
   };
 }
 

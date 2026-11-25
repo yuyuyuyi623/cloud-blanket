@@ -16,7 +16,7 @@ import {
 import { useSettings } from '../settings.js'
 import { maybeAutoConsolidate } from '../memory/consolidationRunner.js'
 import { recordMessageUsage } from '../usage/ledger.js'
-import { buildStableSegment } from '../../../engine/context.js'
+import { buildStableSegment, pickSeedTurns, seedInjectionCount } from '../../../engine/context.js'
 import {
   blanketOfSession,
   refreshBlankets,
@@ -38,6 +38,7 @@ import {
   canContinueReply,
   estimateTokens,
   getContextRounds,
+  getReplyText,
   settleReply,
   toRequestMessages,
 } from './reply.js'
@@ -1224,9 +1225,25 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         requestTs = Date.now()
         // 稳定段与动态段先把预算占住（A4）：历史只剩多少用多少，稳定段/动态段一分不让。
         const stable = blanketMemory ? buildStableSegment(blanketMemory.record.pack) : SYSTEM_PROMPT
+        // 续接历史（v1.0.2 层二）：seed 占用"历史位置"，随真实对话单调退场，到 0 就完全消失。
+        const realRounds = getContextRounds(prepared.history)
+        const realMessages = realRounds.reduce(
+          (sum, [user, reply]) => sum + (user.content ? 1 : 0) + (getReplyText(reply) ? 1 : 0),
+          0
+        )
+        const seedTurns = blanketMemory
+          ? pickSeedTurns(
+              blanketMemory.record.pack.seedTurns ?? [],
+              seedInjectionCount(
+                realMessages,
+                blanketMemory.record.pack.seedTurns?.length ?? 0
+              )
+            )
+          : []
         // 被子模式：动态段按本轮提问现算（engine 口径：永远是最后一条 system）
         const dynamic = blanketMemory
-          ? blanketMemory.memory.retrieve(prepared.question.content).dynamic
+          ? blanketMemory.memory.retrieve(prepared.question.content, { seedBridged: seedTurns.length > 0 })
+              .dynamic
           : ''
         const messages = toRequestMessages(
           prepared.history,
@@ -1236,7 +1253,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           // 普通模式走官方原样（不裁）；被子模式才有稳定段与动态段，也才需要预算
           blanketMemory
             ? { reservedTokens: estimateTokens(stable) + estimateTokens(dynamic) }
-            : undefined
+            : undefined,
+          seedTurns
         )
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',

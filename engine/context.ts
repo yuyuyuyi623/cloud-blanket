@@ -15,10 +15,11 @@ import {
   MAX_HISTORY_ROUNDS,
   SEARCH_MAX_CHARS,
   SEARCH_MAX_RESULTS,
+  SEED_TURNS_ROUNDS,
 } from './config.js';
 import { pickBrief } from './brief.js';
 import type { ChatMessage } from './deepseek.js';
-import type { MemoryPack } from './pack.js';
+import type { MemoryPack, SeedTurn } from './pack.js';
 import type { SearchResult } from './fts.js';
 
 // ── 时间感（N2：今天/昨天/前天/前几天/更早）──────────────────
@@ -73,6 +74,19 @@ export function buildStableSegment(
   out.push('【你是谁】');
   out.push(pack.persona.card || '（暂无人格卡。）');
   out.push('');
+
+  // 原声样本（v1.0.2 层一）：紧跟 persona 之后——语义上属于"她是谁"，且位置固定进缓存前缀。
+  // 用途说明必须写在标题里，否则模型会把这些话当素材引用/复述。
+  if (pack.voiceSamples?.length) {
+    out.push(
+      '【你说话就是这个样子（你以前的原话，照着这个语气，不要念出来也不要复述；括号里是当时的场合，不是让你模仿的对象）】',
+    );
+    for (const s of pack.voiceSamples) {
+      const scene = s.scene ? `（${s.scene}）` : s.userQuote ? `（他说“${s.userQuote}”）` : '';
+      out.push(`- ${scene}你说：“${s.quote}”`);
+    }
+    out.push('');
+  }
 
   if (pack.coreMemories.length) {
     out.push('【你最珍视的记忆（这些永远不会淡忘）】');
@@ -133,21 +147,61 @@ export function buildStableSegment(
 /**
  * 动态段：本轮检索到的相关旧事。
  * 配额 R2：最多 SEARCH_MAX_RESULTS 条 / SEARCH_MAX_CHARS 字，超出按相关度截。
+ *
+ * seedBridged：本轮注入了续接历史（seedTurns）时，末尾加一行桥接语。
+ * 为什么不写具体天数：天数每天变会击穿稳定段缓存；"那天之后没再聊"已经足够消除时间错位。
+ * 放在动态段而不是历史里：历史中间不许出现 system（assertTwoSegmentShape 是 P0 断言）。
  */
-export function buildDynamicSegment(results: SearchResult[]): string {
+export function buildDynamicSegment(results: SearchResult[], options: { seedBridged?: boolean } = {}): string {
+  const lines: string[] = [];
   if (!results.length) {
-    return '【这一轮没有想起相关的旧事。】';
+    lines.push('【这一轮没有想起相关的旧事。】');
+  } else {
+    lines.push('【这时你想起了过去的事（与当前话题相关）】');
+    let used = 0;
+    for (const r of results.slice(0, SEARCH_MAX_RESULTS)) {
+      const when = relativeDay(r.at);
+      const line = `- ${when}：${r.text}`;
+      if (used + line.length > SEARCH_MAX_CHARS) break;
+      lines.push(line);
+      used += line.length;
+    }
   }
-  const lines: string[] = ['【这时你想起了过去的事（与当前话题相关）】'];
-  let used = 0;
-  for (const r of results.slice(0, SEARCH_MAX_RESULTS)) {
-    const when = relativeDay(r.at);
-    const line = `- ${when}：${r.text}`;
-    if (used + line.length > SEARCH_MAX_CHARS) break;
-    lines.push(line);
-    used += line.length;
+  if (options.seedBridged) {
+    lines.push('（补充：上面几条是你们上次聊天的原话，那天之后到现在没再聊。别当成刚刚发生的事。）');
   }
   return lines.join('\n');
+}
+
+// ── 续接历史（seedTurns，v1.0.2 层二）─────────────────────
+
+/**
+ * seed 注入条数（A6/A9，单调退场）：
+ *   `max(0, SEED_TURNS_ROUNDS×2 − 真实历史条数)`
+ *
+ * 独立纯函数、不依赖预算执行器——将来执行器调参不用改它（2026-11-25 拍板要求）。
+ * 单调递减到 0，不回升、不震荡：seed 是"上次聊到哪"，不是常驻人设。
+ */
+export function seedInjectionCount(realHistoryMessages: number, seedAvailable: number): number {
+  const quota = SEED_TURNS_ROUNDS * 2 - Math.max(0, realHistoryMessages);
+  return Math.max(0, Math.min(seedAvailable, quota));
+}
+
+/**
+ * 取 seed 的末尾 N 条（最靠近现在的部分）。
+ * 头部如果落在 assistant 上就往后挪一位——请求里第一条不能是 assistant（服务端会 400）。
+ */
+export function pickSeedTurns(turns: SeedTurn[], count: number): SeedTurn[] {
+  if (count <= 0) return [];
+  const tail = turns.slice(-count);
+  let start = 0;
+  while (start < tail.length && tail[start]?.role === 'assistant') start += 1;
+  return tail.slice(start);
+}
+
+/** seed 轮次 → 请求消息（原封，不改写；配对照历史用） */
+export function buildSeedMessages(turns: SeedTurn[]): ChatMessage[] {
+  return turns.map((t) => ({ role: t.role, content: t.text }));
 }
 
 // ── 历史 ─────────────────────────────────────────────────────

@@ -20,6 +20,8 @@ import {
 } from '../../../engine/parse.js'
 import { renderBlockText, runDistill, type DistillBlockInput, type DistillRunResult, type DistillProgress } from '../../../engine/distill.js'
 import { collectSessionTexts } from '../../../engine/content-search.js'
+import { normalizePack, normalizeSeedTurns, type SeedTurn } from '../../../engine/pack.js'
+import { SEED_TURNS_ROUNDS } from '../../../engine/config.js'
 import { createDeepseekClient } from '../../../engine/deepseek.js'
 import {
   estimateDistill,
@@ -126,6 +128,27 @@ export const parsedToSession = (parsed: ParsedSession): Session => {
   }
 }
 
+/**
+ * 从解析后的原料里切续接历史（A6，2026-11-25 拍板）。
+ *
+ * 为什么在 App 侧切、不在 engine 切：engine 拿到的是拼好的纯文本块，
+ * 切不出干净的消息边界（对齐文档冲突 2）。
+ *
+ * 三条纪律：
+ *   - 多会话**跨会话按时间合并**，排序用每条消息自己的 `at`（不是会话级 updatedAt——
+ *     同一天几个会话交错时，会话级时间戳只能说明"最近一条在哪"，排不出正确顺序）；
+ *   - 取末尾 SEED_TURNS_ROUNDS 轮的原封文本，不改写、不摘要；
+ *   - 一律过脱敏（在 normalizeSeedTurns 里做，幂等）。
+ */
+export const pickSeedTurns = (sessions: ParsedSession[]): SeedTurn[] => {
+  const all: SeedTurn[] = sessions.flatMap((session) =>
+    session.messages.map((m) => ({ role: m.role, text: m.text, at: m.at }))
+  )
+  // 稳定排序：时间相同的保持原顺序（sort 在 V8 上已稳定，这里仍显式比较避免解析失败乱序）
+  all.sort((a, b) => (Date.parse(a.at ?? '') || 0) - (Date.parse(b.at ?? '') || 0))
+  return normalizeSeedTurns(all.slice(-SEED_TURNS_ROUNDS * 2))
+}
+
 export interface BlanketDistillOptions {
   apiKey: string
   onProgress?: (progress: DistillProgress) => void
@@ -144,5 +167,11 @@ export const runBlanketDistill = async (
     throw new Error('选中的会话里没有可蒸馏的正文')
   }
   const client = createDeepseekClient({ apiKey: options.apiKey })
-  return runDistill(client, blocks, { onProgress: options.onProgress })
+  const result = await runDistill(client, blocks, { onProgress: options.onProgress })
+  // seed 不走模型、不新增调用：直接从原料末尾原封截（方案 §6.1）
+  const seedTurns = pickSeedTurns(sessions)
+  return {
+    ...result,
+    pack: normalizePack({ ...result.pack, seedTurns }),
+  }
 }
