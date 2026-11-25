@@ -102,15 +102,19 @@ export const updatePack = async (
   id: string,
   mutate: (pack: MemoryPack) => MemoryPack,
 ): Promise<void> => {
+  await updateBlanket(id, (current) => ({ ...current, pack: mutate(current.pack) }))
+}
+
+/** 手改被子记录级字段（水位、autoConsolidate、impressionAuto……）：与 updatePack 同一套先内存后落库 */
+export const updateBlanket = async (
+  id: string,
+  mutate: (record: BlanketRecord) => BlanketRecord,
+): Promise<void> => {
   const current = useBlankets.getState().list.find((item) => item.id === id)
   if (!current) {
     return
   }
-  const next: BlanketRecord = {
-    ...current,
-    pack: mutate(current.pack),
-    updatedAt: Date.now(),
-  }
+  const next: BlanketRecord = { ...mutate(current), updatedAt: Date.now() }
   useBlankets.setState((state) => ({
     list: state.list.map((item) => (item.id === id ? next : item)),
   }))

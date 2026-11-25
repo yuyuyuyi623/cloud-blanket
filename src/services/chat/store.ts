@@ -14,6 +14,7 @@ import {
   useUploads,
 } from '../attachments.js'
 import { useSettings } from '../settings.js'
+import { maybeAutoConsolidate } from '../memory/consolidationRunner.js'
 import { recordMessageUsage } from '../usage/ledger.js'
 import { buildStableSegment } from '../../../engine/context.js'
 import {
@@ -1271,6 +1272,9 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         }
         reply = settleReply(reply, 'done', Date.now())
         recordReplyUsage(blanketMemory ? 'blanket' : 'normal', reply, requestTs)
+        if (blanketMemory) {
+          maybeAutoConsolidate(blanketMemory.record.id) // 聊完查水位，达标就空闲时后台巩固
+        }
         break
       } catch (error) {
         if (controller.signal.aborted) {
@@ -1305,6 +1309,9 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           // 已收到 message_delta 的结束原因，只是缺了结尾的 message_stop
           reply = settleReply(reply, 'done', Date.now())
           recordReplyUsage(blanketMemory ? 'blanket' : 'normal', reply, requestTs)
+          if (blanketMemory) {
+            maybeAutoConsolidate(blanketMemory.record.id)
+          }
         } else if (error instanceof ApiError) {
           recordError('对话', error)
           reply = settleReply(reply, 'error', Date.now(), {

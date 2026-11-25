@@ -61,7 +61,15 @@ export const LedgerPanel = () => {
   }, [])
 
   const modeLabel = (mode: UsageLogEntry['mode']): string =>
-    t(mode === 'normal' ? 'ledgerModeNormal' : mode === 'blanket' ? 'ledgerModeBlanket' : 'ledgerModeDistill')
+    t(
+      mode === 'normal'
+        ? 'ledgerModeNormal'
+        : mode === 'blanket'
+          ? 'ledgerModeBlanket'
+          : mode === 'distill'
+            ? 'ledgerModeDistill'
+            : 'ledgerModeConsolidate'
+    )
 
   /** 展示向上取整到分：宁可贵点也不能让用户看到的数字低于真账单（2026-11-25 拍板） */
   const ceilFen = (cost: number): string => `¥${(Math.ceil(cost * 100) / 100).toFixed(2)}`

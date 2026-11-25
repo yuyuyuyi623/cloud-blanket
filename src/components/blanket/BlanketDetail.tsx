@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { openBlanketChat } from '../../services/chat/blanketChat.js'
-import { removeBlanket, updatePack } from '../../services/memory/blanketStore.js'
+import { removeBlanket, updateBlanket, updatePack } from '../../services/memory/blanketStore.js'
 import type { BlanketRecord } from '../../services/memory/blanket.js'
 import { exportBlanketMarkdown } from './exportBlanket.js'
 import { formatDate } from '../../utils/format.js'
@@ -66,12 +66,7 @@ export const BlanketDetail = ({ blanket, onClose }: { blanket: BlanketRecord; on
           )}
         </div>
 
-        <TextSection
-          title={t('blanketDetailImpression')}
-          value={pack.persona.impression ?? ''}
-          empty={t('blanketEditWritePrompt')}
-          onSave={(impression) => save((p) => ({ ...p, persona: { ...p.persona, impression } }))}
-        />
+        <ImpressionSection blanket={blanket} />
 
         <ListSection
           title={t('blanketDetailCore')}
@@ -150,18 +145,73 @@ export const BlanketDetail = ({ blanket, onClose }: { blanket: BlanketRecord; on
   )
 }
 
+/**
+ * 整体印象（半生长区，记忆巩固方案 四·附）：默认她自己重写；
+ * 用户手改即接管（impressionAuto = false，显示「已暂停」），点「恢复自动」交还。
+ * 角色卡正文与日记是冻结区，机器永不碰——这条红线只豁免这一格。
+ */
+const ImpressionSection = ({ blanket }: { blanket: BlanketRecord }) => {
+  const t = useTranslate()
+  const paused = blanket.impressionAuto === false
+
+  return (
+    <TextSection
+      title={t('blanketDetailImpression')}
+      value={blanket.pack.persona.impression ?? ''}
+      empty={t('blanketEditWritePrompt')}
+      afterTitle={
+        paused ? (
+          <>
+            {' '}
+            <span className={styles.impressionBadge}>{t('impressionPaused')}</span>
+            <button
+              type="button"
+              className={styles.editLink}
+              onClick={() => {
+                void updateBlanket(blanket.id, (record) => ({ ...record, impressionAuto: true }))
+              }}
+            >
+              {t('impressionResume')}
+            </button>
+          </>
+        ) : undefined
+      }
+      onSave={(impression) => {
+        // 手改即接管（拍板选 A）：不弹二次确认，静默停止自动更新
+        void updateBlanket(blanket.id, (record) => ({
+          ...record,
+          pack: { ...record.pack, persona: { ...record.pack.persona, impression } },
+          impressionAuto: false,
+        }))
+      }}
+      footer={
+        <details className={styles.impressionHint}>
+          <summary>{t('impressionHintTitle')}</summary>
+          <p>{t('impressionHintBody')}</p>
+        </details>
+      }
+    />
+  )
+}
+
 /** 整段文字（角色卡、整体印象）：显示态一键改，编辑态 textarea + 存/取消 */
 const TextSection = ({
   title,
   value,
   empty,
   onSave,
+  afterTitle,
+  footer,
 }: {
   title: string
   value: string
   /** 为空时也显示区块（带"写"入口），不让用户找不到地方下手 */
   empty: string
   onSave: (value: string) => void
+  /** 标题行后缀（如「已暂停」徽标 + 「恢复自动」按钮） */
+  afterTitle?: ReactNode
+  /** 区块尾部附注（可展开说明等） */
+  footer?: ReactNode
 }) => {
   const t = useTranslate()
   const [editing, setEditing] = useState(false)
@@ -174,7 +224,10 @@ const TextSection = ({
 
   return (
     <div className={styles.sectionBlock}>
-      <div className={styles.sectionTitle}>{title}</div>
+      <div className={styles.sectionTitle}>
+        {title}
+        {afterTitle}
+      </div>
       {editing ? (
         <>
           <textarea
@@ -214,6 +267,7 @@ const TextSection = ({
           </button>
         </>
       )}
+      {footer}
     </div>
   )
 }

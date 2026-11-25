@@ -23,6 +23,7 @@ import { buildErrorLogText } from '../../services/diagnostics/errorLog.js'
 import { exportBackup, restoreBackup } from '../../services/backup/backup.js'
 import { reportStorageError } from '../../services/chat/db.js'
 import { BlanketDetail } from './BlanketDetail.js'
+import { ConsolidationPanel } from './ConsolidationPanel.js'
 import { DiaryDialog } from './DiaryDialog.js'
 import { LedgerPanel } from './LedgerPanel.js'
 import styles from './BlanketSidePanel.module.css'
@@ -152,6 +153,8 @@ export const BlanketSidePanel = () => {
                   <IconBookOutline16 />
                   <span>{t('blanketPanelEntryDiary')}</span>
                 </button>
+                {/* 记忆巩固区块（方案 §四）：角色卡/日记入口下方 */}
+                <ConsolidationPanel blanket={current} />
               </>
             ) : (
               <>

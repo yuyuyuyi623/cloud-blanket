@@ -18,6 +18,8 @@ import { SettingsDialog } from '../components/settings/SettingsDialog.js'
 import { Toast } from '../components/base/Toast.js'
 import { showToast } from '../components/base/toastState.js'
 import { onUploadNotice } from '../services/attachments.js'
+import { useBlankets } from '../services/memory/blanketStore.js'
+import { checkAllBlanketsForConsolidation } from '../services/memory/consolidationRunner.js'
 import { Button } from '../components/base/Button.js'
 import { stopReadAloud } from '../services/speech/readAloud.js'
 import { CollapsedSider } from '../components/sider/CollapsedSider.js'
@@ -73,6 +75,22 @@ export const App = () => {
   useEffect(() => {
     void initChat()
     // 首启引导不自动弹（羽翼 2026-11-24 拍板）：无 Key 访客点「随便聊聊」时才由 openWelcome 触发
+  }, [])
+
+  // 应用打开时全量查一次巩固水位（方案 §3.1）：关页即暂停、重开续跑，水位幂等不会重蒸
+  useEffect(() => {
+    const check = () => checkAllBlanketsForConsolidation()
+    // 被子列表是异步加载的，等 loaded 再查；晚到的检查没有意义——聊完一轮还会再查
+    const unsubscribe = useBlankets.subscribe((state) => {
+      if (state.loaded) {
+        unsubscribe()
+        check()
+      }
+    })
+    if (useBlankets.getState().loaded) {
+      check()
+    }
+    return unsubscribe
   }, [])
 
   // 从通知栏/文件管理器「分享」过来的包：取出来直接进导入流程，省掉用户自己找文件。

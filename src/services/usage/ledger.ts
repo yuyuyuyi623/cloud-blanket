@@ -103,6 +103,29 @@ export const recordDistillCost = async (costCny: number, ts: number = Date.now()
   await addUsageLog({ ts, mode: 'distill', hit: 0, miss: 0, completion: 0, peak, cost: costCny })
 }
 
+/**
+ * 巩固记一笔（账本方案 §3.3）：走账本同一张表，模式 = 'consolidate'。
+ * 保守口径（2026-11-25 拍板）：promptTokens 不分命中/未命中，全部按未命中价计
+ * （命中价只有未命中价的 1/50，混算会显著低估）；峰谷取开始/结束任一落峰。
+ */
+export const recordConsolidationUsage = async (
+  promptTokens: number,
+  completionTokens: number,
+  startTs: number,
+  endTs: number = startTs
+): Promise<void> => {
+  const peak = isPeakHours(new Date(startTs)) || isPeakHours(new Date(endTs))
+  await addUsageLog({
+    ts: endTs,
+    mode: 'consolidate',
+    hit: 0,
+    miss: promptTokens,
+    completion: completionTokens,
+    peak,
+    cost: estimateCost({ hit: 0, miss: promptTokens, completion: completionTokens }, peak),
+  })
+}
+
 /** 账本页一次读两样：最近明细 + 全量累计 */
 export const getLedger = async (
   limit = 50

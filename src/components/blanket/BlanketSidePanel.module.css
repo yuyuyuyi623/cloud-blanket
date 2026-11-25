@@ -425,3 +425,59 @@
   font-size: 12px;
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* ── 记忆巩固区块（记忆巩固方案 §四）：跟备份区同款骨架 ── */
+
+.consolidRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.consolidLabel {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.consolidStatus {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.consolidFailed {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dsw-alias-text-warning, #b25e00);
+}
+
+/* ── 整体印象：半生长区状态（已暂停徽标 + 展开说明）── */
+
+.impressionBadge {
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 7px;
+  font-size: 10px;
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--cb-card-border, rgba(128, 128, 128, 0.15));
+}
+
+.impressionHint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.impressionHint summary {
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.impressionHint p {
+  margin: 6px 0 0;
+  line-height: 1.6;
+}

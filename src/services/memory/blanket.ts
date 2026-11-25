@@ -33,6 +33,16 @@ export interface BlanketRecord {
   chatSessionId?: string
   /** 进回收站的时间；缺省 = 正常在用。回收站 30 天后自动彻底删除 */
   deletedAt?: number
+  /** 记忆巩固水位：巩固时对话框的消息条数快照。缺省 = 从未巩固（从 0 起算） */
+  lastConsolidatedMsgCount?: number
+  /** 上次巩固完成时间（UTC 毫秒），与 lastConsolidatedMsgCount 同步写，两者一起构成事务 */
+  lastConsolidatedAt?: number
+  /** 上次巩固新增的事件条数，她的角落"上次巩固"行展示用 */
+  lastConsolidatedNewCount?: number
+  /** 自动巩固开关；缺省 = 开（2026-11-24 拍板默认开启）。关 = 水位冻结，重开从旧水位续跑 */
+  autoConsolidate?: boolean
+  /** 整体印象自动更新；缺省 = 开。用户手改 impression 即接管为 false（2026-11-24 追加拍板） */
+  impressionAuto?: boolean
   pack: MemoryPack
   createdAt: number
   updatedAt: number

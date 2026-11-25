@@ -67,8 +67,8 @@ export interface UsageLogEntry {
   id: string
   /** 请求发出时刻（蒸馏 = 完成时刻），UTC 毫秒 */
   ts: number
-  /** 普通对话 / 被子对话 / 蒸馏 */
-  mode: 'normal' | 'blanket' | 'distill'
+  /** 普通对话 / 被子对话 / 蒸馏 / 记忆巩固 */
+  mode: 'normal' | 'blanket' | 'distill' | 'consolidate'
   hit: number
   miss: number
   completion: number
