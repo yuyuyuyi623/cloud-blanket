@@ -14,7 +14,7 @@ import type { Session } from '../chat/types.js'
 import type { RangeReader } from '../../../engine/zip-reader.js'
 import {
   loadSessionsFromReader,
-  chunkMessages,
+  chunkMessagesWithQuota,
   type LoadResult,
   type ParsedSession,
 } from '../../../engine/parse.js'
@@ -79,11 +79,11 @@ export const buildPlan = (sessions: ParsedSession[]): ImportPlan => {
   return { rows, estimate: estimateDistill(rows) }
 }
 
-/** 选中的会话 → 蒸馏块（按消息边界切，一条消息不劈两半） */
+/** 选中的会话 → 蒸馏块（按消息边界切，一条消息不劈两半；块配额按时间三段递增，A7-B） */
 export const buildBlocks = (sessions: ParsedSession[]): DistillBlockInput[] => {
   const blocks: DistillBlockInput[] = []
   for (const session of sessions) {
-    for (const chunk of chunkMessages(session.messages)) {
+    for (const chunk of chunkMessagesWithQuota(session.messages)) {
       blocks.push({
         blockIndex: blocks.length,
         text: renderBlockText(chunk.messages),

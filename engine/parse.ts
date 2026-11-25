@@ -13,7 +13,7 @@
  */
 
 import JSZip from 'jszip';
-import { DISTILL_BLOCK_WORDS } from './config.js';
+import { DISTILL_BLOCK_QUOTA_EARLY, DISTILL_BLOCK_QUOTA_MID, DISTILL_BLOCK_QUOTA_RECENT, DISTILL_BLOCK_WORDS } from './config.js';
 import { ZipDirectory, utf8Decode, type RangeReader } from './zip-reader.js';
 
 // ── 类型 ─────────────────────────────────────────────────────
@@ -217,6 +217,95 @@ export function chunkMessages(
     if (m.at) cur.lastAt = m.at;
   }
   return chunks;
+}
+
+/**
+ * 把一段消息按"恰好 parts 块"切开，切点只能在消息边界上（一条消息绝不劈成两半）。
+ *
+ * 做法：按字数等分算出理想切点，再在允许的索引区间里挑离理想切点最近的消息边界
+ * （边界索引必须严格递增、且给后面的块留够消息）。确定性算法：同样输入必得同样输出。
+ */
+function splitByParts(messages: ParsedMessage[], parts: number): DistillChunk[] {
+  const n = messages.length;
+  const make = (from: number, to: number): DistillChunk => {
+    const slice = messages.slice(from, to);
+    return {
+      messages: slice,
+      words: slice.reduce((a, m) => a + m.text.length, 0),
+      firstAt: slice[0]?.at ?? '',
+      lastAt: slice[slice.length - 1]?.at ?? '',
+    };
+  };
+  if (parts <= 1 || n <= parts) {
+    return n === 0 ? [] : [make(0, n)];
+  }
+  const prefix: number[] = [0];
+  for (const m of messages) prefix.push((prefix[prefix.length - 1] ?? 0) + m.text.length);
+  const total = prefix[n] ?? 0;
+
+  const bounds: number[] = [0];
+  let prev = 0;
+  for (let j = 1; j < parts; j += 1) {
+    const ideal = (total * j) / parts;
+    const min = prev + 1;
+    const max = n - (parts - j);
+    let best = min;
+    for (let i = min; i <= max; i += 1) {
+      if (Math.abs((prefix[i] ?? 0) - ideal) < Math.abs((prefix[best] ?? 0) - ideal)) best = i;
+    }
+    bounds.push(best);
+    prev = best;
+  }
+  bounds.push(n);
+  return bounds.slice(1).map((to, i) => make(bounds[i] ?? 0, to));
+}
+
+/**
+ * 块配额按时间三段递增（A7-B，2026-11-25）：
+ *   - 仍按 2 万字切出 total 块（总数与旧口径一致，成本不变）；
+ *   - 但这 total 块按 10:13:18 分配给 早期/中期/近期 —— 早期块更大（粗），近期块更小（细）；
+ *   - 首尾必留：第一块从最早一条消息开始，最后一块收在最新一条。
+ *
+ * 消息太少（<3 条）、块数太少（<3 块）时退回普通切块——配额在三段上分不出东西。
+ */
+export function chunkMessagesWithQuota(
+  messages: ParsedMessage[],
+  blockWords: number = DISTILL_BLOCK_WORDS,
+  quota: readonly [number, number, number] = [
+    DISTILL_BLOCK_QUOTA_EARLY,
+    DISTILL_BLOCK_QUOTA_MID,
+    DISTILL_BLOCK_QUOTA_RECENT,
+  ]
+): DistillChunk[] {
+  const total = chunkMessages(messages, blockWords).length;
+  if (messages.length < 3 || total < 3) return chunkMessages(messages, blockWords);
+
+  // 时间三段：按累计字数在 1/3、2/3 处的消息边界切
+  const thirds = splitByParts(messages, 3);
+  if (thirds.length < 3) return chunkMessages(messages, blockWords);
+
+  const weightSum = quota.reduce((a, b) => a + b, 0);
+  const maxMessages = thirds.map((c) => c.messages.length);
+  const counts = thirds.map((chunk, i) => {
+    // 每段至少 1 块、至多"这段有几条消息"
+    const want = Math.floor((total * (quota[i] ?? 1)) / weightSum);
+    return Math.min(chunk.messages.length, Math.max(1, want));
+  });
+  // 余数给最近的一段（近期多留一块，符合"近期更重要"），其次中期、早期
+  let remainder = total - counts.reduce((a, b) => a + b, 0);
+  let guard = 0;
+  while (remainder > 0 && guard < 1000) {
+    for (const target of [2, 1, 0]) {
+      if (remainder > 0 && (counts[target] ?? 0) < (maxMessages[target] ?? 0)) {
+        counts[target] = (counts[target] ?? 0) + 1;
+        remainder -= 1;
+      }
+    }
+    guard += 1;
+  }
+  if (remainder > 0) return chunkMessages(messages, blockWords);
+
+  return thirds.flatMap((chunk, i) => splitByParts(chunk.messages, counts[i] ?? 1));
 }
 
 // ── 读整个包 ─────────────────────────────────────────────────

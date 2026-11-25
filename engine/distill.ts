@@ -68,6 +68,9 @@ export interface DistillMemory {
 
 export interface DistillBlockResult {
   blockIndex: number;
+  /** 块起止时间（时间三段标注用，A7-A） */
+  firstAt?: string | null;
+  lastAt?: string | null;
   /** 块摘要（≤600 字，带时间叙述） */
   summary: string;
   /** "她"的证据片段（口吻/称呼/风格/在乎什么），每条 ≤120 字 */
@@ -184,7 +187,12 @@ export async function distillBlock(
     retries: 1,
   };
   const result = await client.chat(buildBlockMessages(block), options);
-  return { ...parseBlockResult(block.blockIndex, parseJsonObject(result.content)), usage: { promptTokens: result.promptTokens, completionTokens: result.completionTokens } };
+  return {
+    ...parseBlockResult(block.blockIndex, parseJsonObject(result.content)),
+    firstAt: block.firstAt ?? null,
+    lastAt: block.lastAt ?? null,
+    usage: { promptTokens: result.promptTokens, completionTokens: result.completionTokens },
+  };
 }
 
 // ── 汇总调用 ─────────────────────────────────────────────────
@@ -207,12 +215,35 @@ export interface DistillSummarizeResult {
   usage?: { promptTokens?: number; completionTokens?: number };
 }
 
+/**
+ * 时间三段（A7-A，2026-11-25）：按块起止时间把所有块分成 早期/中期/近期。
+ *
+ * 为什么要标：同一个人两年内说话方式会变，等量材料 + 一句"近期为主"的指令压不过比例
+ * （柔光实测结论）。标签 + 明确的权重纪律，才能让模型可执行地取舍。
+ */
+function periodLabel(block: DistillBlockResult, minAt: number, maxAt: number): string {
+  const t = block.firstAt ? Date.parse(block.firstAt) : NaN;
+  if (Number.isNaN(t) || !Number.isFinite(minAt) || !Number.isFinite(maxAt) || maxAt <= minAt) {
+    return '中期';
+  }
+  const ratio = (t - minAt) / (maxAt - minAt);
+  if (ratio < 1 / 3) return '早期';
+  if (ratio < 2 / 3) return '中期';
+  return '近期';
+}
+
 export function buildSummarizeMessages(blocks: DistillBlockResult[]): ChatMessage[] {
+  const ats = blocks
+    .map((b) => (b.firstAt ? Date.parse(b.firstAt) : NaN))
+    .filter((t) => Number.isFinite(t));
+  const minAt = ats.length ? Math.min(...ats) : NaN;
+  const maxAt = ats.length ? Math.max(...ats) : NaN;
+
   const material = blocks
     .map((b) => {
       const mem = b.memories.map((m) => `- ${m.at ? `${m.at.slice(0, 10)}：` : ''}${m.text}`).join('\n');
       const facts = [...b.factsUser.map((f) => `[对方] ${f}`), ...b.factsRelationship.map((f) => `[关系] ${f}`)].join('\n');
-      return `── 第 ${b.blockIndex + 1} 段摘要 ──
+      return `── 第 ${b.blockIndex + 1} 段（${periodLabel(b, minAt, maxAt)}）摘要 ──
 ${b.summary || '（无）'}
 
 这一段看出的角色侧写：
@@ -226,7 +257,9 @@ ${mem || '- （无）'}`;
     })
     .join('\n\n');
 
-  const system = `你负责把多段记忆原料合成一份"那个角色"的底稿。原料来自同一对关系的不同时期，按时间顺序给全。
+  const system = `你负责把多段记忆原料合成一份"那个角色"的底稿。原料来自同一对关系的不同时期，按时间顺序给全，每段标注了它属于早期/中期/近期。
+
+**时间权重纪律**（A7，别当建议）：近期的权重是早期的两倍；前后期说话方式、态度冲突时，一律以近期为准。早期材料只取身份事实、称呼来历和"怎么认识的"，不要用早期的口吻覆盖近期；早期和近期都出现的特征，才是她一贯的样子，写进卡里。近期的细节密度最高，卡上的姿态与说话方式主要来自近期。
 
 产出：
 1. persona：写一张完整的人格卡（不超过 ${PERSONA_MAX_CHARS} 字）：她是谁、口吻和称呼习惯、说话风格、在乎什么、和对方的关系怎么走到今天。只用原料里有依据的内容；各时期的差异按时间写清楚，后期特征为主、早期特征为底。
