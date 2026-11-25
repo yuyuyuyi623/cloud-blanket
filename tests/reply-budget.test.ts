@@ -82,8 +82,8 @@ describe('toRequestMessages 预算执行器', () => {
   })
 
   it('稳定段吃满预算：历史被裁到最近几轮，且仍是整轮', () => {
-    // 稳定段打满实测 5571 token（文档 §10.2），7000×0.9 的执行口径下只剩 ~700 给历史
-    const out = toRequestMessages(rounds(20), question, undefined, undefined, budget(5571))
+    // 事件 30→60 后稳定段满容量实测 6537 token（A3），8000×0.9 的执行口径下只剩 ~600 给历史
+    const out = toRequestMessages(rounds(20), question, undefined, undefined, budget(6537))
     const users = out.filter((m) => m.role === 'user')
     const assistants = out.filter((m) => m.role === 'assistant')
     expect(assistants.length).toBe(users.length - 1) // 每轮成对；本轮的提问还没有回答

@@ -14,7 +14,12 @@ import {
 } from '../engine/distill.js';
 import type { LlmClient } from '../engine/deepseek.js';
 import { LlmError } from '../engine/deepseek.js';
-import { DISTILL_BLOCK_RETRIES, DISTILL_CONCURRENCY, DISTILL_TIMEOUT_MS } from '../engine/config.js';
+import {
+  DISTILL_BLOCK_RETRIES,
+  DISTILL_CONCURRENCY,
+  DISTILL_TIMEOUT_MS,
+  EPISODES_LIMIT,
+} from '../engine/config.js';
 import type { ParsedMessage } from '../engine/parse.js';
 
 const block: DistillBlockInput = {
@@ -323,7 +328,7 @@ describe('runDistill 流水线', () => {
     expect(r.blockResults.every((b) => b.summary === 'ok')).toBe(true);
   });
 
-  it('事件候选超过 30 条保留最新 30（normalizeEpisodes 语义）', async () => {
+  it('事件候选超过上限时按三段分层保留（A3：60 条）', async () => {
     let call = 0;
     const client = scriptedClient(
       () => {
@@ -333,9 +338,9 @@ describe('runDistill 流水线', () => {
         });
       },
     );
-    const blocks: DistillBlockInput[] = Array.from({ length: 5 }, (_, i) => ({ blockIndex: i, text: `块${i}` }));
+    const blocks: DistillBlockInput[] = Array.from({ length: 8 }, (_, i) => ({ blockIndex: i, text: `块${i}` }));
     const r = await runDistill(client, blocks);
-    expect(r.pack.memories).toHaveLength(30);
+    expect(r.pack.memories).toHaveLength(EPISODES_LIMIT);
   });
 });
 

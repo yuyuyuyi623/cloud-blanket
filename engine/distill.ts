@@ -417,8 +417,11 @@ export async function runDistill(
   done = blocks.length;
   emit('summarize');
 
-  // 事件层：全部块的事件候选合并（蒸馏必须产出 memories；超 30 条保留最新 30，确认页明写）
-  const memories = normalizeEpisodes(results.flatMap((r) => r.memories));
+  // 事件层：全部块的事件候选合并（蒸馏必须产出 memories；超 60 条按三段分层保留，确认页明写）
+  // 已进核心候选的事件永远保留（A3）：她在"最珍视"里记着的事不能因为采样名额被挤掉。
+  const memories = normalizeEpisodes(results.flatMap((r) => r.memories), {
+    coreTexts: summarize.coreCandidates.map((c) => c.text),
+  });
   // 事实：两类分开抽（D2），交替合并再卡 30 条——先排一类会把另一类整段挤掉（实测 0 条关系事实）
   const facts = normalizeFacts(interleaveFacts(summarize.factsUser, summarize.factsRelationship));
 

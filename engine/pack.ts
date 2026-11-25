@@ -12,6 +12,7 @@ import {
   CORE_MEMORY_LIMIT,
   EPISODES_CHARS,
   EPISODES_LIMIT,
+  EPISODES_PINNED_EARLIEST,
   EPISODE_BANDS,
   FACTS_CHARS,
   FACTS_LIMIT,
@@ -31,7 +32,7 @@ export interface CoreMemory {
   at: string | null;
 }
 
-/** 事件层（N1）：具体发生过的事，forget 的唯一作用对象 */
+/** 事件层（N1）：具体发生过的事；append-only，只增不删不改（forget 已在 v1.0.2 删除） */
 export interface MemoryEpisode {
   text: string;
   at: string | null;
@@ -132,10 +133,14 @@ export function normalizeCoreMemories(raw: unknown): CoreMemory[] {
 /**
  * 事件层（N1）：
  * - 同文去重：先出现的保留（老条目保留原时间，同 mergeProfileEpisodes 语义）；
- * - 保留 pickEpisodes 分层挑出的 30 条（不是"只留最新的"）；
- * - 每条截断 EPISODES_CHARS（120，不放宽）。
+ * - 保留 pickEpisodes 分层挑出的 60 条（不是"只留最新的"）；
+ * - 每条截断 EPISODES_CHARS（120，不放宽）；
+ * - `coreTexts`：已进核心记忆的事件（A3）——它们永远保留、不参与采样。
  */
-export function normalizeEpisodes(raw: unknown): MemoryEpisode[] {
+export function normalizeEpisodes(
+  raw: unknown,
+  options: { coreTexts?: readonly string[] } = {},
+): MemoryEpisode[] {
   if (!Array.isArray(raw)) return [];
   const seen = new Set<string>();
   const all: MemoryEpisode[] = [];
@@ -149,7 +154,12 @@ export function normalizeEpisodes(raw: unknown): MemoryEpisode[] {
     if (brief) episode.brief = brief;
     all.push(episode);
   }
-  return pickEpisodes(all);
+  const coreTexts = new Set(options.coreTexts ?? []);
+  return pickEpisodes(
+    all,
+    EPISODES_LIMIT,
+    coreTexts.size ? { isPinned: (episode) => coreTexts.has(episode.text) } : {},
+  );
 }
 
 /**
@@ -169,6 +179,13 @@ function sampleEven<T>(items: readonly T[], k: number): T[] {
   return out;
 }
 
+export interface PickEpisodesOptions<T> {
+  /** 保底保留的最早条数（默认 EPISODES_PINNED_EARLIEST） */
+  pinnedEarliest?: number;
+  /** 命中即永远保留、不参与采样的条目（已进核心记忆的事件） */
+  isPinned?: (item: T) => boolean;
+}
+
 /**
  * 事件保留策略：按时间分三段，早期/中期/近期各留一批。
  *
@@ -176,22 +193,49 @@ function sampleEven<T>(items: readonly T[], k: number): T[] {
  * 两三天，10-27 到 11-01 整整六天一条都没有。她记得你是谁、记得碎事实，
  * 却不记得你们中间那几周——这是结构缺失，加预算补不上。
  *
- * 三段各 10 条：不占上下文预算（总数仍是 EPISODES_LIMIT）、不加钱，
+ * 三段各留一份（2026-11-25 A3 起总数 60）：注入走 brief，增长比全文渲染小得多，
+ * 但**不是零成本**（60×40 字 ≈ 2400 字，见 config.ts EPISODES_LIMIT 注释）。
  * 只是把"只记最近"换成"首尾都留"。段内均匀取样，不集中在某个块。
  * 输入为空或不足上限时原样返回，一条不动。
+ *
+ * pinned（A3，2026-11-25 拍板）：
+ *   - 最早 EPISODES_PINNED_EARLIEST 条**永远保留**，不参与采样（"怎么认识的"不能丢）；
+ *   - `isPinned` 命中的条目（已进核心记忆的事件）同样永远保留——
+ *     它们在她最珍视的记忆里，不能因为采样名额被挤掉；
+ *   - 输出仍按原时间顺序，不重排。
  */
-export function pickEpisodes<T>(all: readonly T[], limit: number = EPISODES_LIMIT): T[] {
+export function pickEpisodes<T>(
+  all: readonly T[],
+  limit: number = EPISODES_LIMIT,
+  options: PickEpisodesOptions<T> = {},
+): T[] {
   if (all.length <= limit) return [...all];
-  const per = Math.floor(limit / EPISODE_BANDS);
-  const picked: T[] = [];
-  for (let b = 0; b < EPISODE_BANDS; b += 1) {
-    const start = Math.floor((all.length * b) / EPISODE_BANDS);
-    const end = Math.floor((all.length * (b + 1)) / EPISODE_BANDS);
-    // 余数给最近的一段：近期多留一两条，符合"最近的事更容易被提起"
-    const quota = b === EPISODE_BANDS - 1 ? limit - per * (EPISODE_BANDS - 1) : per;
-    picked.push(...sampleEven(all.slice(start, end), quota));
+  const isPinned = options.isPinned ?? (() => false);
+  const earliest = options.pinnedEarliest ?? EPISODES_PINNED_EARLIEST;
+
+  const chosen = new Set<number>();
+  all.forEach((item, index) => {
+    if (index < earliest || isPinned(item)) chosen.add(index);
+  });
+  // 保底本身就超限（理论上不会：5 + 核心 5）——按时间顺序取前 limit 条，不制造更多
+  if (chosen.size >= limit) {
+    return all.filter((_, index) => chosen.has(index)).slice(0, limit);
   }
-  return picked;
+
+  // 剩下的名额在"未被 pin 的部分"里按三段分层取样
+  const pool = all.map((item, index) => ({ item, index })).filter(({ item, index }) => !chosen.has(index) && !isPinned(item));
+  const remain = limit - chosen.size;
+  const per = Math.floor(remain / EPISODE_BANDS);
+  for (let b = 0; b < EPISODE_BANDS; b += 1) {
+    const start = Math.floor((pool.length * b) / EPISODE_BANDS);
+    const end = Math.floor((pool.length * (b + 1)) / EPISODE_BANDS);
+    // 余数给最近的一段：近期多留一两条，符合"最近的事更容易被提起"
+    const quota = b === EPISODE_BANDS - 1 ? remain - per * (EPISODE_BANDS - 1) : per;
+    for (const { index } of sampleEven(pool.slice(start, end), quota)) {
+      chosen.add(index);
+    }
+  }
+  return all.filter((_, index) => chosen.has(index));
 }
 
 /**

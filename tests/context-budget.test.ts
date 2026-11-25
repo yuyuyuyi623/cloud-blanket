@@ -89,14 +89,21 @@ function historyMessages(count: number, charsPerMsg = 70) {
   }));
 }
 
-describe('上下文预算（7000）', () => {
+describe('上下文预算（8000）', () => {
   const stable = buildStableSegment(fullPack(), MANUAL);
   const stableTokens = tokens(stable);
 
-  it('稳定段打满不超过预算的八成（留给轮次和检索至少两成）', () => {
-    // 实测 5571 / 7000 = 79.6%，只剩 29 token 余量 —— 这不是巧合，是"刚好够"。
-    // 任何人把 persona/摘要/条数往上调，都会先在这里撞墙。
-    expect(stableTokens).toBeLessThanOrEqual(Math.floor(CONTEXT_BUDGET_TOKENS * 0.8));
+  it('稳定段打满之后，仍留得出「最近 4 轮 + 检索 3 条」的余量', () => {
+    // 2026-11-25 A3（事件 30→60）后满容量实测 6537 / 8000 = 81.7%：
+    // 八成那条线已经守不住了（事件层扩容是拍板要的），但"最少还能聊上几句"必须守住。
+    const reserveHistory = historyMessages(4);
+    const reserve = tokens([
+      ...reserveHistory.map((m) => m.content),
+      buildDynamicSegment(fakeFts(3)),
+    ].join('\n'));
+    expect(stableTokens).toBeLessThanOrEqual(CONTEXT_BUDGET_TOKENS - reserve);
+    // 逐项变动的护栏：persona/摘要/事件条数再往上调，会先在这里撞墙
+    expect(stableTokens).toBeLessThanOrEqual(Math.floor(CONTEXT_BUDGET_TOKENS * 0.85));
   });
 
   it('稳定段 + 最近 8 轮 + 检索 3 条，装得进预算', () => {
@@ -113,8 +120,8 @@ describe('上下文预算（7000）', () => {
   });
 
   it('检索 8 条全装会超：SEARCH_MAX_RESULTS 是上限，不是每轮配额', () => {
-    // 这条不是"目标"，是"知识"：稳定段 5571 + 10 轮 993 + 8 条 832 = 7396 > 7000。
-    // M3 的执行器必须按剩余空间决定装几条，别照着 SEARCH_MAX_RESULTS 硬塞。
+    // 这条不是"目标"，是"知识"：稳定段 6537 + 10 轮 993 + 8 条 832 = 8362 > 8000。
+    // 执行器必须按剩余空间决定装几条，别照着 SEARCH_MAX_RESULTS 硬塞。
     const fts = fakeFts(SEARCH_MAX_RESULTS);
     const dyn = tokens(buildDynamicSegment(fts));
     const history = limitConversationHistory(

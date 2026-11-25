@@ -4,6 +4,7 @@ import { characterJaccard, isRoughOverwrite } from '../engine/jaccard.js';
 import {
   CORE_MEMORY_LIMIT,
   EPISODES_LIMIT,
+  EPISODES_PINNED_EARLIEST,
   FACTS_LIMIT,
   JACCARD_THRESHOLD,
   PERSONA_MAX_CHARS,
@@ -79,12 +80,12 @@ describe('normalizeCoreMemories（E1/E4）', () => {
 
 describe('normalizeEpisodes（N1）', () => {
   it('超上限时分层保留：最早的最晚的都在，中间也有（不再 slice(-30)）', () => {
-    const many = Array.from({ length: 40 }, (_, i) => ({ text: `事件${String(i).padStart(2, '0')}` }));
+    const many = Array.from({ length: 120 }, (_, i) => ({ text: `事件${String(i).padStart(3, '0')}` }));
     const out = normalizeEpisodes(many);
     expect(out).toHaveLength(EPISODES_LIMIT);
-    expect(out[0]?.text).toBe('事件00'); // 最早那条必须留
-    expect(out.at(-1)?.text).toBe('事件39'); // 最近那条也留
-    expect(out.some((e) => e.text === '事件20')).toBe(true); // 中段有人管
+    expect(out[0]?.text).toBe('事件000'); // 最早那条必须留
+    expect(out.at(-1)?.text).toBe('事件119'); // 最近那条也留
+    expect(out.some((e) => e.text === '事件060')).toBe(true); // 中段有人管
   });
 
   it('同文去重，老条目保留原时间（mergeProfileEpisodes 语义）', () => {
@@ -276,8 +277,23 @@ describe('pickEpisodes（分层保留，2026-11-22：不再只留最近两三天
     expect(out).not.toEqual(tailOnly);
   });
 
+  it('最早 5 条保底：无论采样怎么挑，怎么认识的都在（A3）', () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({ text: `事件${i}` }));
+    const out = pickEpisodes(many);
+    for (let i = 0; i < EPISODES_PINNED_EARLIEST; i += 1) {
+      expect(out.some((e) => e.text === `事件${i}`)).toBe(true);
+    }
+  });
+
+  it('已进核心记忆的事件永远保留，不参与采样（A3）', () => {
+    const many = Array.from({ length: 200 }, (_, i) => ({ text: `事件${i}` }));
+    const out = pickEpisodes(many, EPISODES_LIMIT, { isPinned: (e) => e.text === '事件150' });
+    expect(out.some((e) => e.text === '事件150')).toBe(true);
+    expect(out).toHaveLength(EPISODES_LIMIT);
+  });
+
   it('normalizeEpisodes 走的是分层，不是切片', () => {
-    const raw = Array.from({ length: 60 }, (_, i) => ({ text: `事件${i}`, at: '2026-11-02' }));
+    const raw = Array.from({ length: 120 }, (_, i) => ({ text: `事件${i}`, at: '2026-11-02' }));
     const out = normalizeEpisodes(raw);
     expect(out).toHaveLength(EPISODES_LIMIT);
     expect(out[0]!.text).toBe('事件0'); // 最早的那条还在

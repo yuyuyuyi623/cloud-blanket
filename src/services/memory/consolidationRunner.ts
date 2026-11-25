@@ -135,7 +135,6 @@ export const mergeConsolidation = (
   const newEpisodes = asStringList(output.memories)
     .slice(0, 5) // 与 engine NEW_EPISODES_PER_RUN 同口径，单次最多 5 条
     .map((text) => ({ text: text.slice(0, EPISODES_CHARS), at: nowIso }))
-  const memories = normalizeEpisodes([...pack.memories, ...newEpisodes])
 
   const facts = Array.isArray(output.facts) ? normalizeFacts(output.facts) : pack.facts
 
@@ -145,6 +144,11 @@ export const mergeConsolidation = (
     ...pack.coreMemories,
     ...newCoreTexts.map((text) => ({ text, at: nowIso })),
   ])
+
+  // 核心条目永远保留在事件层（A3）：先算核心，再按"已进核心"给事件层打 pin
+  const memories = normalizeEpisodes([...pack.memories, ...newEpisodes], {
+    coreTexts: coreMemories.map((c) => c.text),
+  })
 
   const rawImpression = typeof output.impression === 'string' ? output.impression.trim() : ''
   const impressionUpdated = options.impressionAuto && rawImpression.length > 0
