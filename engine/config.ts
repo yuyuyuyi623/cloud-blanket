@@ -48,7 +48,12 @@ export const FACTS_CHARS = 200;
  *   1. 巩固 prompt 每次都把 memories 全量列进去（engine/consolidation.ts），
  *      30→60 后每次巩固输入多约 750 字 ≈ +560 token ≈ +¥0.001/次（谷价）；
  *   2. 聊天注入用的是 brief（40 字/条），60 条 ≈ 2400 字 ≈ 1680 token，
- *      比 30 条多约 840 token——稳定段打满时会吃掉历史窗口的余量（预算执行器会据此裁轮次）。
+ *      比 30 条多约 840 token——稳定段打满时会吃掉历史窗口的余量。
+ *      对冲机制：预算执行器会据此裁轮次——它在 `src/services/chat/reply.ts`
+ *      的 `limitRoundsByBudget`（不在 engine/，因为裁的是发出去的请求消息）。
+ *      每轮由 store.ts 实测稳定段+动态段 token 作为 reservedTokens 传入，
+ *      稳定段变长 → 剩给历史的变小 → 轮次自动收缩，不是固定窗口硬塞。
+ *      配套测试：src 同目录 tests/reply-budget.test.ts + tests/context-budget.test.ts。
  */
 export const EPISODES_LIMIT = 60;
 /**
