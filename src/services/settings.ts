@@ -38,6 +38,9 @@ const KEYS = {
 /** 备份/恢复要读写全部设置键；从这里出，避免备份侧自己抄一份清单后两处漂移。 */
 export const SETTINGS_KEYS: readonly string[] = Object.values(KEYS)
 
+/** API 密钥的存储键：备份不导出、恢复不覆盖（羽翼拍板 2026-11-25——备份文件可能被别人看，密钥是能直接花钱的活口，重填一次不麻烦），备份侧要单独排除它。 */
+export const API_KEY_STORAGE_KEY = KEYS.apiKey
+
 const read = (key: string) => {
   try {
     return localStorage.getItem(key)

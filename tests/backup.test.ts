@@ -1,13 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  applySettings,
   BACKUP_SCHEMA_VERSION,
   BackupFormatError,
   backupFileName,
   buildManifest,
+  collectSettings,
   fromJsonl,
   parseManifest,
   toJsonl,
 } from '../src/services/backup/backup.js'
+import { API_KEY_STORAGE_KEY } from '../src/services/settings.js'
 
 describe('备份 manifest', () => {
   it('buildManifest 产出带类型标记与版本号的结构', () => {
@@ -80,5 +83,40 @@ describe('备份文件名', () => {
     const name = backupFileName(new Date(2026, 10, 25, 9, 5)) // 2026-11-25 09:05 本地
     expect(name).toBe('cloud-blanket-backup-20261125-0905.zip')
     expect(name).not.toContain(':')
+  })
+})
+
+describe('备份与 API 密钥', () => {
+  /** node 环境没有 localStorage，用 Map 模拟一个（只覆盖用到的四个方法） */
+  const store = new Map<string, string>()
+  const localStorageShim = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+  }
+
+  it('collectSettings 不导出 API 密钥（备份文件可能被别人看，2026-11-25 拍板）', () => {
+    vi.stubGlobal('localStorage', localStorageShim)
+    localStorageShim.setItem(API_KEY_STORAGE_KEY, 'sk-secret')
+    localStorageShim.setItem('chat-demo:locale', 'zh')
+    const collected = collectSettings()
+    expect(collected[API_KEY_STORAGE_KEY]).toBeUndefined()
+    expect(collected['chat-demo:locale']).toBe('zh')
+    vi.unstubAllGlobals()
+  })
+
+  it('applySettings 跳过 API 密钥：不覆盖、也不因为包里没有而删掉现有密钥', () => {
+    vi.stubGlobal('localStorage', localStorageShim)
+    localStorageShim.setItem(API_KEY_STORAGE_KEY, 'sk-current')
+    localStorageShim.setItem('chat-demo:locale', 'en')
+    // 模拟旧版备份包：里面竟然还带密钥，也绝不允许覆盖
+    applySettings({ [API_KEY_STORAGE_KEY]: 'sk-from-backup', 'chat-demo:locale': 'zh' })
+    expect(localStorageShim.getItem(API_KEY_STORAGE_KEY)).toBe('sk-current')
+    expect(localStorageShim.getItem('chat-demo:locale')).toBe('zh')
+    // 模拟新版备份包：包里没有的设置键按缺席处理（移除），但密钥不动
+    applySettings({})
+    expect(localStorageShim.getItem(API_KEY_STORAGE_KEY)).toBe('sk-current')
+    expect(localStorageShim.getItem('chat-demo:locale')).toBeNull()
+    vi.unstubAllGlobals()
   })
 })

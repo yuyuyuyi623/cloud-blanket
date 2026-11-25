@@ -6,7 +6,7 @@
  *
  * 格式：zip（fflate 流式压缩，附件放原始二进制不 base64，省 33% 体积）：
  *   manifest.json        校验用（类型标记 + 格式版本 + 各 store 条数）
- *   settings.json        localStorage 全部键值（含 API 密钥——文件名上就提醒别外传）
+ *   settings.json        localStorage 键值（不含 API 密钥——备份文件可能被别人看，密钥恢复后重填）
  *   sessions.jsonl       逐条 JSON 行（不导 sessionSummaries，恢复时重建）
  *   blankets.json        被子记录（含记忆包）
  *   blanketSessions.jsonl 被子原料会话
@@ -24,7 +24,7 @@ import JSZip from 'jszip'
 import { iterateStore, restoreFromBackup } from '../chat/db.js'
 import type { BlanketSessionRecord, StoredFile } from '../chat/db.js'
 import type { BlanketRecord } from '../memory/blanket.js'
-import { SETTINGS_KEYS } from '../settings.js'
+import { API_KEY_STORAGE_KEY, SETTINGS_KEYS } from '../settings.js'
 import type { Session } from '../chat/types.js'
 
 /** 备份格式版本：结构不兼容时递增，恢复侧按它拒绝或转换 */
@@ -91,10 +91,13 @@ export const fromJsonl = <T>(text: string): T[] => {
   return out
 }
 
-/** 收集全部设置键值（含 API 密钥——备份文件因此带敏感信息，调用方必须提醒） */
+/** 收集设置键值。API 密钥永不导出（2026-11-25 拍板）：备份文件可能给别人看，重填一次不麻烦 */
 export const collectSettings = (): Record<string, string> => {
   const out: Record<string, string> = {}
   for (const key of SETTINGS_KEYS) {
+    if (key === API_KEY_STORAGE_KEY) {
+      continue
+    }
     const value = localStorage.getItem(key)
     if (value !== null) {
       out[key] = value
@@ -103,9 +106,15 @@ export const collectSettings = (): Record<string, string> => {
   return out
 }
 
-/** 恢复设置：原样写回。不认识的键忽略（向前兼容），认识的键不丢 */
+/**
+ * 恢复设置：原样写回。不认识的键忽略（向前兼容），认识的键不丢。
+ * API 密钥跳过：旧版备份包里可能还带密钥（禁止覆盖现有设备的），新版包里本来就没有。
+ */
 export const applySettings = (record: Record<string, string>): void => {
   for (const key of SETTINGS_KEYS) {
+    if (key === API_KEY_STORAGE_KEY) {
+      continue
+    }
     const value = record[key]
     if (typeof value === 'string') {
       localStorage.setItem(key, value)
@@ -279,8 +288,8 @@ export const exportBackup = async (appVersion: string): Promise<void> => {
 // ── 恢复 ─────────────────────────────────────────────────────
 
 /**
- * 恢复备份：读 zip → 校验 manifest → 设置写回 localStorage → 单事务覆盖 IndexedDB。
- * 设置里的 apiKey 等写回后由调用方 reload 生效。
+ * 恢复备份：读 zip → 校验 manifest → 设置写回 localStorage（API 密钥除外，不覆盖不删除）→ 单事务覆盖 IndexedDB。
+ * 设置写回后由调用方 reload 生效；API 密钥不在备份里，恢复后用户需重新输入。
  * 附件找不到只影响缩略图/查看，不阻断恢复。
  */
 export const restoreBackup = async (file: File): Promise<void> => {
