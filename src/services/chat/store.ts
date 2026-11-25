@@ -36,6 +36,7 @@ import { createLatestReminder } from './latestReminder.js'
 import {
   applyEvent,
   canContinueReply,
+  estimateTokens,
   getContextRounds,
   settleReply,
   toRequestMessages,
@@ -1221,25 +1222,28 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         updateReply(sessionId, reply)
         persist(sessionId)
         requestTs = Date.now()
+        // 稳定段与动态段先把预算占住（A4）：历史只剩多少用多少，稳定段/动态段一分不让。
+        const stable = blanketMemory ? buildStableSegment(blanketMemory.record.pack) : SYSTEM_PROMPT
+        // 被子模式：动态段按本轮提问现算（engine 口径：永远是最后一条 system）
+        const dynamic = blanketMemory
+          ? blanketMemory.memory.retrieve(prepared.question.content).dynamic
+          : ''
         const messages = toRequestMessages(
           prepared.history,
           prepared.question,
           prepared.prefix,
-          latestReminder
+          latestReminder,
+          // 普通模式走官方原样（不裁）；被子模式才有稳定段与动态段，也才需要预算
+          blanketMemory
+            ? { reservedTokens: estimateTokens(stable) + estimateTokens(dynamic) }
+            : undefined
         )
         const events = streamMessage(
           useSettings.getState().apiKey ?? '',
           {
             model: initial.model ?? MODEL,
-            system: blanketMemory
-              ? buildStableSegment(blanketMemory.record.pack)
-              : SYSTEM_PROMPT,
-            // 被子模式：动态段按本轮提问现算（engine 口径：永远是最后一条 system）
-            ...(blanketMemory
-              ? {
-                  systemSuffix: blanketMemory.memory.retrieve(prepared.question.content).dynamic,
-                }
-              : {}),
+            system: stable,
+            ...(dynamic ? { systemSuffix: dynamic } : {}),
             messages,
             thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
             safety_check: SAFETY_CHECK,

@@ -117,6 +117,12 @@ export const BRIEF_OVERFLOW_RATIO = 1.6;
  * 所以执行时当 6300 用（留 10% 余量），别贴着 7000 装。
  */
 export const CONTEXT_BUDGET_TOKENS = 7000;
+/**
+ * 执行器的安全余量：装的时候按 7000×0.9 = 6300 装。
+ * 出处同上一段注释（文档 §10.3）：TOKENS_PER_CHAR 是粗估，
+ * 边界上真值偏 5~10%，贴着 7000 装迟早被真 tokenizer 顶破。
+ */
+export const CONTEXT_BUDGET_SAFETY_RATIO = 0.9;
 
 // ─────────────────────────────────────────────────────────────
 // 检索层（R2；v1.1 拍板 8 条 / 1200 字）

@@ -1,3 +1,9 @@
+import {
+  CONTEXT_BUDGET_SAFETY_RATIO,
+  CONTEXT_BUDGET_TOKENS,
+  MAX_HISTORY_ROUNDS,
+  TOKENS_PER_CHAR,
+} from '../../../engine/config.js'
 import { toWireAction } from '../api/chatCompletions.js'
 import type {
   FileBlockParam,
@@ -342,15 +348,104 @@ export const getContextRounds = (history: Message[]): [UserMessage, AssistantMes
 }
 
 /**
+ * 历史预算（A4 预算执行器，2026-11-25 拍板）：
+ * 稳定段冻结、动态段本轮现算，两者都不许被历史挤掉——只剩多少，历史就用多少。
+ */
+export interface HistoryBudget {
+  /** 稳定段 + 动态段已占的 token（调用方拿真实文本估算后传进来） */
+  reservedTokens: number
+  /** 整轮请求预算；缺省 = CONTEXT_BUDGET_TOKENS × 安全余量（≈6300） */
+  budgetTokens?: number
+}
+
+/**
+ * 文本 → 粗估 token。仓库没有 tokenizer，TOKENS_PER_CHAR=0.7 在边界上偏 5~10%，
+ * 所以执行时按 6300 装（config 的 CONTEXT_BUDGET_SAFETY_RATIO）。
+ */
+export const estimateTokens = (text: string): number => Math.ceil(text.length * TOKENS_PER_CHAR)
+
+/** 单条请求消息的估算：文件块只算 file_id 引用，图片真值交给服务端 */
+export const estimateMessageTokens = (message: MessageParam): number =>
+  estimateTokens(
+    typeof message.content === 'string'
+      ? message.content
+      : message.content.map((block) => (block.type === 'text' ? block.text : '')).join('')
+  )
+
+/**
+ * 从最近一轮往回装（文档 §10.4 第 2 条：装不下就停，不是装完再裁——裁完会剩半轮对话）。
+ * 一轮装不下就整轮不进；轮数同时受 MAX_HISTORY_ROUNDS 约束。
+ */
+const limitRoundsByBudget = (
+  groups: MessageParam[][],
+  question: MessageParam,
+  prefix: MessageParam | undefined,
+  budget: HistoryBudget
+): MessageParam[][] => {
+  const total = budget.budgetTokens ?? Math.floor(CONTEXT_BUDGET_TOKENS * CONTEXT_BUDGET_SAFETY_RATIO)
+  const fixed =
+    budget.reservedTokens +
+    estimateMessageTokens(question) +
+    (prefix ? estimateMessageTokens(prefix) : 0)
+  const available = total - fixed
+
+  const kept: MessageParam[][] = []
+  let used = 0
+  for (let i = groups.length - 1; i >= 0; i--) {
+    if (kept.length >= MAX_HISTORY_ROUNDS) {
+      break
+    }
+    const group = groups[i]
+    const cost = group.reduce((sum, message) => sum + estimateMessageTokens(message), 0)
+    if (used + cost > available) {
+      break
+    }
+    kept.unshift(group)
+    used += cost
+  }
+  return kept
+}
+
+/**
  * 把会话转成请求的 messages：只保留「提问 + 有回答的回复」成对的轮次，最后接上本轮提问。
  * 失败或没有回答的轮次不进上下文。续写时末尾再带上本轮 assistant（带 prefix 标记）。
+ *
+ * 传入 budget 时先按预算裁历史（A4，2026-11-25 拍板）：
+ *   - 稳定段（冻结）+ 动态段（本轮）+ 本轮提问先占，剩下的才给历史；
+ *   - 从最近一轮往回装，装不下就停——**整轮进出，不拆半轮**（拆了她会接不上话）；
+ *   - 轮数另受 MAX_HISTORY_ROUNDS 约束（B1 滑窗定稿，不放宽）。
+ * 不传 budget = 官方原样（普通模式：明码标价，不替用户做裁剪决定）。
  */
 export const toRequestMessages = (
   history: Message[],
   question: UserMessage,
   prefix?: AssistantMessage,
-  latestReminder?: string
+  latestReminder?: string,
+  budget?: HistoryBudget
 ): MessageParam[] => {
+  // 一轮一组：提醒快照跟着它所属的那一轮走，裁轮次时一起进一起出
+  const groups: MessageParam[][] = []
+  for (const [user, reply] of getContextRounds(history)) {
+    // 历史提问没有文字、附件也都没有 serverId 时，提问为空，连同回答一起省略。
+    if (!user.content && toFileBlocks(user.files).length === 0) {
+      continue
+    }
+    const group: MessageParam[] = []
+    if (reply.latestReminder) {
+      group.push({ role: 'latest_reminder', content: reply.latestReminder })
+    }
+    group.push(toUserParam(user), toAssistantParam(reply))
+    groups.push(group)
+  }
+
+  const questionParam = toUserParam(question)
+  const prefixParam = prefix?.prefix ? toAssistantParam(prefix, true) : undefined
+  // 没有非空白正文时直接重发原问题，避免服务端拒绝空前缀。
+  const usablePrefix = prefixParam?.content.trim() ? prefixParam : undefined
+
+  const kept = budget
+    ? limitRoundsByBudget(groups, questionParam, usablePrefix, budget)
+    : groups
   const messages: MessageParam[] = []
   let previousReminder: string | undefined
   const appendReminder = (reminder: string | undefined) => {
@@ -360,25 +455,23 @@ export const toRequestMessages = (
       previousReminder = reminder
     }
   }
-  for (const [user, reply] of getContextRounds(history)) {
-    // 历史提问没有文字、附件也都没有 serverId 时，提问为空，连同回答一起省略。
-    if (!user.content && toFileBlocks(user.files).length === 0) {
-      continue
+  for (const group of kept) {
+    for (const param of group) {
+      if (param.role === 'latest_reminder') {
+        appendReminder(param.content)
+      } else {
+        messages.push(param)
+      }
     }
-    appendReminder(reply.latestReminder)
-    messages.push(toUserParam(user), toAssistantParam(reply))
   }
   appendReminder(latestReminder)
-  messages.push(toUserParam(question))
-  if (prefix?.prefix) {
-    const assistant = toAssistantParam(prefix, true)
-    // 没有非空白正文时直接重发原问题，避免服务端拒绝空前缀。
-    if (assistant.content.trim()) {
-      messages.push(assistant)
-    }
+  messages.push(questionParam)
+  if (usablePrefix) {
+    messages.push(usablePrefix)
   }
   return messages
 }
+
 
 /** 思考用时（秒），至少 1 秒 */
 export const getThinkingSeconds = (startedAt: number, endedAt: number) =>
