@@ -323,6 +323,8 @@ export const en = {
   blanketListItemMeta: '{count} events',
   blanketDetailCreatedAt: 'Tucked in {date}',
   blanketDetailSessions: 'read {count} chats',
+  blanketDetailVoice: '{samples} voice samples',
+  blanketDetailSeed: '{turns} carried-over lines',
   blanketDetailCore: 'Core memories',
   blanketDetailFacts: 'About you',
   blanketDetailMemories: 'What it remembers',

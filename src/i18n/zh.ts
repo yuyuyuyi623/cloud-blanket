@@ -317,6 +317,9 @@ export const zh = {
   blanketListItemMeta: '{count} 件事',
   blanketDetailCreatedAt: '盖于 {date}',
   blanketDetailSessions: '读了 {count} 个会话',
+  /** 只读统计（v1.0.2）：一眼看出这床被子有没有原声样本 / 续接历史 */
+  blanketDetailVoice: '原声样本 {samples} 条',
+  blanketDetailSeed: '续接 {turns} 句',
   blanketDetailCore: '核心记忆',
   blanketDetailFacts: '关于你',
   blanketDetailMemories: '记得的事',

@@ -40,6 +40,11 @@ export const BlanketDetail = ({ blanket, onClose }: { blanket: BlanketRecord; on
           {created ? t('blanketDetailCreatedAt', { date: created }) : null}
           <span>·</span>
           {t('blanketDetailSessions', { count: blanket.sessionIds.length })}
+          {/* 只读统计（v1.0.2 原声三层）：不做成可编辑区——样本的修正口子在 v1.0.3 的编辑页 */}
+          <span>·</span>
+          {t('blanketDetailVoice', { samples: pack.voiceSamples?.length ?? 0 })}
+          <span>·</span>
+          {t('blanketDetailSeed', { turns: pack.seedTurns?.length ?? 0 })}
           <span>·</span>
           {t('blanketEditHint')}
         </div>
