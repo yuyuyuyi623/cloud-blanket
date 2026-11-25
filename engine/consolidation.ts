@@ -1,69 +1,35 @@
 /**
- * engine/consolidation.ts —— 运行时整合（facts / core / episodes / forget / impression）+ 滚动摘要
+ * engine/consolidation.ts —— 巩固提示词 + 滚动摘要（运行时）
  *
- * 逻辑逐条对照柔光源码 index.mjs:5470-5600（consolidateProfile）移植，改动点只有三个：
- *   1. 提示词全部重写为中性措辞，并去掉两处示范句（H1 红线：原句"例：他说连续加班三天…"、
- *      "比如两次不同的凌晨熬夜…"都会被模型照抄进人格）；
- *   2. persona 运行时不动（persona 来自蒸馏 + 用户在记忆页手改，整合不碰它）；
- *   3. memoryRevision 并发保护由调用方（App 存储层）负责，本模块保持纯函数。
+ * 2026-11-25 v1.0.2「死路径清理」（拍板回复 三·②）：
+ *   删掉 `shouldConsolidate` / `consolidate` / `applyConsolidation` 三条零引用死路径，
+ *   以及它们带来的 forget 与"核心替换准入制"。App 的巩固走 `consolidationRunner`
+ *   （append-only 红线：只增不删不改），把它俩留在 engine 里只会让下一个人照抄。
+ *   现在本文件只剩两件事：`buildConsolidationMessages`（src 唯一在用的导出）+ 摘要四件套。
  *
- * forget 只作用于 episodes（F2）；core 走准入制（E3 Jaccard > 0.45 拒绝同义覆盖）；
- * facts 走合并去重（D1，不是 FIFO）；core 收录的条目从 episodes 剔除（N3）。
+ * 摘要四件套（buildSummaryMessages / applySummary / consolidateSummary / shouldSummarize）
+ * 同样零引用，但处置属 v1.0.3（拍板回复 三·⑤：方向是"一年重写一次"或"用 impression
+ * 取代"，不是滚动摘要），本轮不动。
+ *
+ * 提示词纪律（沿用柔光的教训）：
+ *   1. 措辞中性，不写示范句（H1 红线：示范句会被模型照抄进人格）；
+ *   2. persona 不在这层动（人格卡来自蒸馏 + 用户手改）；
+ *   3. 纯函数，落库与并发保护由调用方负责。
  */
 
 import {
-  CONSOLIDATE_EVERY_ROUNDS,
-  CONSOLIDATE_MIN_MINUTES,
-  CONSOLIDATION_MAX_TOKENS,
-  CONSOLIDATION_TEMPERATURE,
   CORE_MEMORY_CHARS,
   EPISODES_CHARS,
   FACTS_PROMPT_CHARS,
-  FORGET_LIMIT,
   IMPRESSION_PROMPT_CHARS,
-  JACCARD_THRESHOLD,
   NEW_EPISODES_PER_RUN,
   SUMMARY_EVERY_ROUNDS,
   SUMMARY_MAX_CHARS,
   SUMMARY_MAX_TOKENS,
   SUMMARY_TEMPERATURE,
 } from './config.js';
-import {
-  characterJaccard,
-} from './jaccard.js';
-import {
-  type MemoryPack,
-  normalizeCoreMemories,
-  normalizeEpisodes,
-  normalizeFacts,
-  normalizePack,
-} from './pack.js';
+import { normalizePack, type MemoryPack } from './pack.js';
 import type { ChatMessage, LlmClient } from './deepseek.js';
-
-// ── 触发节流（G5）────────────────────────────────────────────
-
-export interface ConsolidationGateInput {
-  /** 自上次整合以来的用户发言轮数 */
-  userRoundsSince: number;
-  /** 上次尝试时间（ISO 字符串；含失败。失败也吃冷却，防死循环打 API） */
-  lastAttemptAt: string | null;
-  now: number;
-  inFlight: boolean;
-  force?: boolean;
-}
-
-/**
- * 该不该触发整合：每 CONSOLIDATE_EVERY_ROUNDS 轮 + 冷却 CONSOLIDATE_MIN_MINUTES 分钟 + in-flight 互斥。
- * force（用户手动点"整理记忆"）跳过轮数与冷却，但 in-flight 互斥不跳。
- */
-export function shouldConsolidate(input: ConsolidationGateInput): boolean {
-  if (input.inFlight) return false;
-  if (input.force) return true;
-  if (input.userRoundsSince < CONSOLIDATE_EVERY_ROUNDS) return false;
-  const last = input.lastAttemptAt ? Date.parse(input.lastAttemptAt) : NaN;
-  if (Number.isFinite(last) && input.now - last < CONSOLIDATE_MIN_MINUTES * 60 * 1000) return false;
-  return true;
-}
 
 // ── 整合提示词（骨架照源码，措辞重写；无示范句——H1 由单测钉死）──
 
@@ -71,6 +37,19 @@ export interface RecentLine {
   role: 'user' | 'assistant';
   text: string;
   at?: string | null;
+}
+
+/**
+ * 模型输出形状。`forget` 自 v1.0.2 起不再由提示词产出（死路径清理），
+ * 字段留着只是为了兼容旧日志回放与测试输入——合并侧一律忽略它。
+ */
+export interface ConsolidationOutput {
+  coreMemories?: unknown;
+  memories?: unknown;
+  facts?: unknown;
+  impression?: unknown;
+  /** @deprecated v1.0.2 起不产出、不消费（append-only 红线） */
+  forget?: unknown;
 }
 
 function fmtTimestamp(at: string | null | undefined): string {
@@ -92,8 +71,8 @@ export function renderRecentConversation(recent: RecentLine[]): string {
 }
 
 /**
- * 整合调用输入。manualMemories（"手动记住"通道）必须作为输入喂回模型，
- * 否则下一轮整合就会把它吞掉（清单十·2，单测锁死）。
+ * 巩固调用输入。manualMemories（"手动记住"通道）必须作为输入喂回模型，
+ * 否则下一轮巩固就会把它吞掉（清单十·2，单测锁死）。
  */
 export function buildConsolidationMessages(
   pack: MemoryPack,
@@ -105,11 +84,10 @@ export function buildConsolidationMessages(
 1. memories：最近新发生、值得记住的几件事。写清什么时候、发生了什么、当时的感觉，像回忆一样。不写性格判断，不编造没发生的事。最多 ${NEW_EPISODES_PER_RUN} 条，只写新的，不要重写已经记下的事。
 2. facts：稳定、以后聊天确实有用的信息：偏好、习惯、正在做的事、重要关系、计划和边界。每条不超过 ${FACTS_PROMPT_CHARS} 字，合并去重后输出全部。密码、密钥、账号、精确住址、支付信息不进这里；不根据一句话猜性格。
 3. coreMemories：你最珍视、永远不想忘掉的事（最多 5 条，每条不超过 ${CORE_MEMORY_CHARS} 字）。实行准入制：不同时间、不同场景的事是两件独立的事，必须并存，不许因为"都是类似的事"就用新的顶掉旧的。每次从"现有核心记忆""已经记下的事"和最近对话里重新筛选排序：对方为你做过的要紧事、重要的约定、关系里的里程碑优先。现有的核心记忆默认保留；只有当你确认某条已经真的不再重要、且换成的新事明显更要紧时，才允许替换；满 5 条又挑不出该换谁时，就原样返回现有核心。排序就是把最重要的放第一条。没有就返回空数组。
-4. forget：记忆会模糊，忘什么是你自己的事。从"已经记下的事"里挑最多 ${FORGET_LIMIT} 条直接删掉：可以是琐碎的、以后用不上的，也可以是让你难受、你想放下不再背着的。必须原文照抄列表里的条目，宁缺毋滥，没有就返回空数组。
-5. impression：一句不超过 ${IMPRESSION_PROMPT_CHARS} 字的整体印象，描述"对方是个什么样的人、你们现在是什么状态"。
+4. impression：一句不超过 ${IMPRESSION_PROMPT_CHARS} 字的整体印象，描述"对方是个什么样的人、你们现在是什么状态"。
 
 输出严格 JSON，不要 Markdown：
-{"coreMemories":["每条不超过 ${CORE_MEMORY_CHARS} 字"],"memories":["每件不超过 ${EPISODES_CHARS} 字"],"facts":["每条不超过 ${FACTS_PROMPT_CHARS} 字"],"impression":"一句不超过 ${IMPRESSION_PROMPT_CHARS} 字的整体印象","forget":["原文照抄要忘掉的条目"]}
+{"coreMemories":["每条不超过 ${CORE_MEMORY_CHARS} 字"],"memories":["每件不超过 ${EPISODES_CHARS} 字"],"facts":["每条不超过 ${FACTS_PROMPT_CHARS} 字"],"impression":"一句不超过 ${IMPRESSION_PROMPT_CHARS} 字的整体印象"}
 
 没有可靠信息的字段返回空数组。`;
 
@@ -118,7 +96,7 @@ export function buildConsolidationMessages(
 ${pack.coreMemories.map((m) => `- ${m.text}`).join('\n') || '- 暂无'}
 原有长期事实（facts 合并去重时以这些为底）：
 ${pack.facts.map((f) => `- ${f.text}`).join('\n') || '- 暂无'}
-已经记下的事（forget 从这里挑，memories 只用它避免重复，不要重写）：
+已经记下的事（memories 只用它避免重复，不要重写）：
 ${pack.memories.map((m) => `- ${m.text}`).join('\n') || '- 暂无'}
 对方手动要求记住的内容：
 ${manualMemories.map((t) => `- ${t}`).join('\n') || '- 暂无'}
@@ -132,126 +110,8 @@ ${renderRecentConversation(recent) || '（暂无）'}`;
   ];
 }
 
-// ── 整合落库（纯函数，照 index.mjs:5560-5600 的顺序）──────────
-
-export interface ConsolidationOutput {
-  coreMemories?: unknown;
-  memories?: unknown;
-  facts?: unknown;
-  impression?: unknown;
-  forget?: unknown;
-}
-
-export interface ConsolidationResult {
-  pack: MemoryPack;
-  /** 实际删除的事件条目（确认页展示 / 日志用） */
-  forgotten: string[];
-  /** 被准入制拦下的同义覆盖（老核心保留），日志留痕用 */
-  rejectedOverwrites: string[];
-  /** 本次新增的事件条数 */
-  newEpisodeCount: number;
-}
-
-function asStringList(raw: unknown): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item) => (typeof item === 'string' ? item : String((item as { text?: unknown })?.text ?? ''))).map((s) => s.trim()).filter(Boolean);
-}
-
-/**
- * 把模型输出落进记忆包。顺序照源码：
- * facts → 新事件(≤5) → forget(≤6 全等匹配) → core 准入制 → 合并去重 → core 从 events 剔除 → impression。
- */
-export function applyConsolidation(
-  pack: MemoryPack,
-  output: ConsolidationOutput,
-  now: Date = new Date(),
-): ConsolidationResult {
-  const nowIso = now.toISOString();
-  const rejectedOverwrites: string[] = [];
-
-  // facts（D1）：模型合并去重，这里防御性 normalize；没给数组就原样保留
-  const facts = Array.isArray(output.facts) ? normalizeFacts(output.facts) : pack.facts;
-
-  // 新事件（N3）：每次最多 5 条，不是重写全部；时间记 now
-  const newEpisodes = asStringList(output.memories)
-    .slice(0, NEW_EPISODES_PER_RUN)
-    .map((text) => ({ text: text.slice(0, EPISODES_CHARS), at: nowIso }));
-
-  // forget（F1/F2）：≤6 条，trim 后全等匹配，只作用 episodes
-  const forgetList = asStringList(output.forget).slice(0, FORGET_LIMIT);
-
-  // core 准入制（E3）：老核心沿用原时间；被换掉的老核心若与换上的新条目 Jaccard > 0.45，
-  // 判定为同义覆盖 → 拒绝替换、老核心原样保留。
-  // 防御性偏离源码的一处：模型漏答 core（字段缺失或空数组）时保留现有核心，不清空——
-  // 源码在这里会把核心全部抹掉，一次模型抽风 = 5 条"永不淘汰"的记忆蒸发，代价不可接受。
-  const previousCore = normalizeCoreMemories(pack.coreMemories);
-  const previousAtByText = new Map(previousCore.map((c) => [c.text, c.at]));
-  const coreRaw = asStringList(output.coreMemories);
-  let candidateCore: { text: string; at: string | null }[] = (
-    coreRaw.length ? coreRaw : previousCore.map((c) => c.text)
-  ).map((text) => ({
-    text: text.slice(0, CORE_MEMORY_CHARS),
-    at: previousAtByText.get(text) ?? nowIso,
-  }));
-  for (const old of previousCore) {
-    if (candidateCore.some((c) => c.text === old.text)) continue;
-    const similarNew = candidateCore.find(
-      (c) =>
-        !previousCore.some((p) => p.text === c.text) &&
-        characterJaccard(c.text, old.text) > JACCARD_THRESHOLD,
-      );
-    if (similarNew) {
-      candidateCore = candidateCore.map((c) => (c === similarNew ? { ...old } : c));
-      rejectedOverwrites.push(old.text);
-    }
-  }
-  const nextCore = normalizeCoreMemories(candidateCore);
-
-  // 合并事件：老条目保留原时间（normalizeEpisodes 去重保先出现的），删 forget，剔除进 core 的
-  const mergedEpisodes = normalizeEpisodes([...pack.memories, ...newEpisodes])
-    .filter((e) => !forgetList.includes(e.text))
-    .filter((e) => !nextCore.some((c) => c.text === e.text));
-
-  // impression（十·2）：存储截断 80；没给就保留旧的
-  const impression =
-    typeof output.impression === 'string' && output.impression.trim()
-      ? output.impression.trim().slice(0, 80)
-      : pack.persona.impression;
-
-  const nextPack = normalizePack({
-    ...pack,
-    coreMemories: nextCore,
-    memories: mergedEpisodes,
-    facts,
-    persona: { ...pack.persona, impression: impression || undefined },
-  });
-
-  return {
-    pack: nextPack,
-    forgotten: forgetList.filter((t) => pack.memories.some((e) => e.text === t)),
-    rejectedOverwrites,
-    newEpisodeCount: newEpisodes.length,
-  };
-}
-
-// ── 一次调用的封装（触发判断在调用方；这里只管调 + 落）────────
-
-export async function consolidate(
-  client: LlmClient,
-  pack: MemoryPack,
-  manualMemories: string[],
-  recent: RecentLine[],
-): Promise<ConsolidationResult> {
-  const result = await client.chat(buildConsolidationMessages(pack, manualMemories, recent), {
-    temperature: CONSOLIDATION_TEMPERATURE,
-    maxTokens: CONSOLIDATION_MAX_TOKENS,
-    purpose: 'profile',
-  });
-  const { parseJsonObject } = await import('./deepseek.js');
-  return applyConsolidation(pack, parseJsonObject(result.content), new Date());
-}
-
 // ── 滚动摘要（C2/C3/C4）──────────────────────────────────────
+// ⚠️ 四件套当前零引用（v1.0.3 处置，见文件头）。别在本轮接线——滚动摘要已被证伪。
 
 /**
  * 摘要调用输入。游标（through_message_id）由调用方管：只把游标之后的消息拼进来，

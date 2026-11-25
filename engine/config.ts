@@ -19,14 +19,14 @@ export const HISTORY_FETCH_COUNT = 30;
 export const CONSOLIDATION_WINDOW = 28;
 
 // ─────────────────────────────────────────────────────────────
-// 整合触发节流（G5；任务书"每 10 轮"口径）
+// 整合触发节流（v1.0.2 死路径清理后只剩摘要口径）
 // ─────────────────────────────────────────────────────────────
+//
+// 原 CONSOLIDATE_EVERY_ROUNDS / CONSOLIDATE_MIN_MINUTES 随 shouldConsolidate 一起删除
+// （2026-11-25 拍板回复 三·②：那三条路径零引用，App 的巩固由 consolidationRunner
+//  自己的水位驱动，不按轮数）。
 
-/** 每 10 轮用户发言触发一次整合（任务书口径，移动端聊天更短更密） */
-export const CONSOLIDATE_EVERY_ROUNDS = 10;
-/** 两次整合之间最少间隔分钟数（线上 config.json 实测值 30） */
-export const CONSOLIDATE_MIN_MINUTES = 30;
-/** 摘要同样每 10 轮走一次（C1 的 App 版口径） */
+/** 摘要同样每 10 轮走一次（C1 的 App 版口径）——当前零引用，v1.0.3 处置 */
 export const SUMMARY_EVERY_ROUNDS = 10;
 
 // ─────────────────────────────────────────────────────────────
@@ -67,8 +67,6 @@ export const SUMMARY_MAX_CHARS = 2000;
 export const TEXT_OVERFLOW_RATIO = 1.15;
 /** persona 卡约 2000 字（K3） */
 export const PERSONA_MAX_CHARS = 2000;
-/** forget 每次整合最多删 6 条（F1，2026-11-22 定稿），只作用于事件层 */
-export const FORGET_LIMIT = 6;
 /** 准入制反同义覆盖阈值：字符集合 Jaccard > 0.45 拒绝替换（E3） */
 export const JACCARD_THRESHOLD = 0.45;
 /**
