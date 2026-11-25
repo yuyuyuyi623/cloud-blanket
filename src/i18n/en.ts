@@ -160,14 +160,14 @@ export const en = {
   historyImported: 'Imported {count} chats',
   historyImportFailed:
     'File import failed. The file format may be invalid, or the ZIP file may use an older chat export format. Please export your chat history from DeepSeek again and retry the import.',
-  historyExportFailed: 'Export failed: {message}',
-  exportAllLabel: 'Export all chats',
+  historyExportFailed: 'Backup failed: {message}',
+  exportAllLabel: 'Backup data',
   storageUsageLabel: 'Local storage usage',
   storageUsageText: '{usage} MB used / about {quota} MB available',
   storageSafetyHint:
-    'Data lives only in this device\'s browser. On iPhone Safari, use it via "Share → Add to Home Screen", or the system may wipe it after 7 days of inactivity. Before switching devices or clearing browser data, export all chats first.',
+    'Data lives only in this device\'s browser. On iPhone Safari, use it via "Share → Add to Home Screen", or the system may wipe it after 7 days of inactivity. Before switching devices or clearing browser data, use "Backup data" or the backup in "Her corner" first.',
   storageQuotaFull:
-    'Local storage is full. Export all chats for backup first, then delete some old chats or large attachments.',
+    'Local storage is full. Use "Backup data" first, then delete some old chats or large attachments.',
   installRowTitle: 'Add to desktop',
   installRowInstalled: 'Added to desktop',
   installRowInstalledHint: 'Already running in its own window',
@@ -180,12 +180,12 @@ export const en = {
   installGenericStep3: 'Tap "Confirm / Install" to finish',
   installCopySteps: 'Copy steps',
   historyExportDescription:
-    'Includes all chat history and locally stored images. Other attachments retain file details only. Your API Key is not included.',
+    'Includes all chats, image originals, every blanket with its memories, and settings. Contains your API Key — keep the file private.',
   exportAllDownload: 'Download',
   deleteAllSessions: 'Delete all chats',
   deleteAllSessionsModalTitle: 'Once deleted, all chats will be cleared and cannot be recovered.',
   deleteAllSessionsModalDescription:
-    'Locally saved attachments and unsent drafts will also be deleted.',
+    'Locally saved attachments and unsent drafts will also be deleted; chats inside blankets are cleared too (the blankets themselves and their memories are kept).',
   historyDeleting: 'Deleting...',
   historyDeleted: 'Successfully deleted.',
   historyDeleteFailed: 'Failed to delete chats. Please try again.',

@@ -154,14 +154,14 @@ export const zh = {
   historyImported: '已导入 {count} 个对话',
   historyImportFailed:
     '文件导入失败，可能是文件格式错误或使用了旧版的对话导出 ZIP 文件，请前往 DeepSeek 重新导出历史对话文件后再次导入。',
-  historyExportFailed: '导出失败：{message}',
-  exportAllLabel: '导出所有历史对话',
+  historyExportFailed: '备份失败：{message}',
+  exportAllLabel: '备份数据',
   storageUsageLabel: '本地存储占用',
   storageUsageText: '本地占用 {usage} MB / 可用约 {quota} MB',
   storageSafetyHint:
-    '数据只存在本设备浏览器里。iPhone 用 Safari 时，请通过「分享 → 添加到主屏幕」使用，否则 7 天不用可能被系统清理；换设备或清缓存前，先「导出所有历史对话」。',
+    '数据只存在本设备浏览器里。iPhone 用 Safari 时，请通过「分享 → 添加到主屏幕」使用，否则 7 天不用可能被系统清理；换设备或清缓存前，先「备份数据」或到「她的角落」备份。',
   storageQuotaFull:
-    '本地存储空间已满，请先「导出所有历史对话」备份，再删除部分旧对话或大附件。',
+    '本地存储空间已满，请先「备份数据」，再删除部分旧对话或大附件。',
   installRowTitle: '添加到桌面',
   installRowInstalled: '已添加到桌面',
   installRowInstalledHint: '已经在独立窗口里运行',
@@ -174,11 +174,12 @@ export const zh = {
   installGenericStep3: '点「确认 / 安装」完成',
   installCopySteps: '复制步骤',
   historyExportDescription:
-    '包含所有历史对话及本地图片原件；其他附件仅保留文件信息，不包含 API Key。',
+    '包含全部对话、图片原件、所有被子与记忆、设置；含 API 密钥，文件请勿外传。',
   exportAllDownload: '下载',
   deleteAllSessions: '删除所有对话',
   deleteAllSessionsModalTitle: '删除后，所有对话都将被清空且无法找回',
-  deleteAllSessionsModalDescription: '本地保存的附件及未发送的草稿也将被删除。',
+  deleteAllSessionsModalDescription:
+    '本地保存的附件及未发送的草稿也将被删除；被子里的聊天记录也会一并清空（被子本身和她的记忆保留）。',
   historyDeleting: '删除中...',
   historyDeleted: '删除成功',
   historyDeleteFailed: '删除失败，请重试',

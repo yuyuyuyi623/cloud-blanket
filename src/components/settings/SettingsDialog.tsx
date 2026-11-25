@@ -7,14 +7,9 @@ import {
   IconFollowsystemOutline16,
   IconLightOutline16,
   IconSettingsOutline16,
-  IconUploadOutline14,
 } from '../base/icons.js'
-import {
-  BackupError,
-  clearHistory,
-  exportHistory,
-  importHistory,
-} from '../../services/chat/backup.js'
+import { BackupError, clearHistory } from '../../services/chat/backup.js'
+import { exportBackup } from '../../services/backup/backup.js'
 import { useIsMobile } from '../../app/viewport.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { getStorageEstimate } from '../../services/storage.js'
@@ -42,7 +37,9 @@ import { closeSettings, useSettingsDialog, type SettingsSection } from './settin
 import styles from './Settings.module.css'
 
 /**
- * 设置弹窗：分「通用设置」（主题、语言、朗读音色、位置）与「数据管理」（API Key、导入、导出、删除）。
+ * 设置弹窗：分「通用设置」（主题、语言、朗读音色、位置）与「数据管理」（API Key、备份、删除）。
+ * 数据管理只留备份/删除：导入走蒸馏向导（侧栏 + 首屏卡片，直接读 zip 不覆盖），
+ * 恢复走她的角落——设置页原「导入历史对话」会整库覆盖、误伤被子聊天，已移除（2026-11-25）。
  * 桌面端为居中弹窗、左侧导航；移动端为底部弹层、导航横排在内容上方
  */
 export const SettingsDialog = () => {
@@ -66,10 +63,9 @@ const SettingsContent = () => {
   const [section, setSection] = useState(() => useSettingsDialog.getState().section)
   // 切换分组不丢失正在输入的 API Key 与导入状态
   const apiKeyEditor = useApiKeyEditor()
-  const historyImport = useHistoryImport()
   const historyDelete = useHistoryDelete()
   const replacingHistory = useChatStore((state) => state.importingHistory)
-  const historyBusy = historyImport.busy || historyDelete.busy || replacingHistory
+  const historyBusy = historyDelete.busy || replacingHistory
   return (
     <>
       <Modal
@@ -110,7 +106,6 @@ const SettingsContent = () => {
           ) : (
             <>
               <ApiKeyField editor={apiKeyEditor} />
-              <ImportHistory historyImport={historyImport} disabled={historyBusy} />
               <ExportHistory disabled={historyBusy} />
               <InstallRow />
               <StorageUsage />
@@ -134,7 +129,6 @@ const SettingsContent = () => {
           )}
         </div>
       </Modal>
-      {historyImport.file ? <ImportConfirm historyImport={historyImport} /> : null}
       {historyDelete.opened ? <DeleteAllConfirm historyDelete={historyDelete} /> : null}
     </>
   )
@@ -322,34 +316,6 @@ const TtsVoiceSetting = () => {
   )
 }
 
-/** 覆盖导入的二次确认，叠在设置弹窗上 */
-const ImportConfirm = ({
-  historyImport,
-}: {
-  historyImport: ReturnType<typeof useHistoryImport>
-}) => {
-  const t = useTranslate()
-  return (
-    <Modal
-      title={t('historyImportConfirmTitle')}
-      className={styles.importConfirm}
-      onClose={historyImport.cancel}
-      footer={
-        <>
-          <Button variant="outlined" size="m" autoFocus onClick={historyImport.cancel}>
-            {t('cancel')}
-          </Button>
-          <Button variant="dangerOutlined" size="m" onClick={() => void historyImport.confirm()}>
-            {t('historyImportConfirm')}
-          </Button>
-        </>
-      }
-    >
-      <div className={styles.importConfirmText}>{t('historyImportConfirmDescription')}</div>
-    </Modal>
-  )
-}
-
 const themeOptions: { value: ThemePreference; label: TranslationKey; icon: ReactNode }[] = [
   {
     value: 'light',
@@ -490,82 +456,6 @@ const SettingCell = ({
   )
 }
 
-/** 选文件后先提示覆盖；确认后才检查文件并执行导入，任何错误都提示导入失败。 */
-const useHistoryImport = () => {
-  const [file, setFile] = useState<File | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState<Status>(null)
-  const importing = useRef(false)
-
-  const confirm = async () => {
-    if (!file || importing.current) {
-      return
-    }
-    importing.current = true
-    setFile(null)
-    setBusy(true)
-    setStatus(null)
-    try {
-      const count = await importHistory(file)
-      setStatus({ key: count === 1 ? 'historyImportedOne' : 'historyImported', params: { count } })
-    } catch {
-      setStatus({ key: 'historyImportFailed', error: true })
-    } finally {
-      importing.current = false
-      setBusy(false)
-    }
-  }
-
-  return { file, busy, status, select: setFile, cancel: () => setFile(null), confirm }
-}
-
-/** 导入 = 覆盖：用选中文件替换本地全部会话与附件。 */
-const ImportHistory = ({
-  historyImport,
-  disabled,
-}: {
-  historyImport: ReturnType<typeof useHistoryImport>
-  disabled: boolean
-}) => {
-  const t = useTranslate()
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  return (
-    <SettingCell
-      label={t('historyImport')}
-      description={t('historyImportDescription')}
-      status={historyImport.status}
-      action={
-        <>
-          <Button
-            variant="outlined"
-            size="m"
-            className={clsx(styles.cellButton, styles.uploadButton)}
-            disabled={disabled}
-            onClick={() => inputRef.current?.click()}
-          >
-            <IconUploadOutline14 />
-            {t('upload')}
-          </Button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".zip,application/zip,application/x-zip-compressed"
-            hidden
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              event.target.value = ''
-              if (file) {
-                historyImport.select(file)
-              }
-            }}
-          />
-        </>
-      }
-    />
-  )
-}
-
 /** 本地存储占用 + 数据安全提示（存储加固 2026-11-24）：打开数据管理页时刷一次；estimate 不可用则整块不显示 */
 const StorageUsage = () => {
   const t = useTranslate()
@@ -599,10 +489,9 @@ const StorageUsage = () => {
   )
 }
 
-/** 将全部会话及图片导出为 ZIP 文件并下载 */
+/** 备份数据：接线到她的角落同一个 exportBackup（完整包：对话+附件原件+被子+记忆+设置），不是官方的历史对话子集导出 */
 const ExportHistory = ({ disabled }: { disabled: boolean }) => {
   const t = useTranslate()
-  const empty = useChatStore((state) => state.sessions.length === 0)
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<Status>(null)
 
@@ -610,14 +499,13 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
     setBusy(true)
     setStatus(null)
     try {
-      const { name, blob } = await exportHistory()
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = name
-      link.click()
-      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      // exportBackup 内部完成下载（桌面端优先另存为）；成功后她的角落与这里共用同一提示
+      await exportBackup(__APP_VERSION__ ?? '')
+      showToast({ key: 'backupDone' })
     } catch (error) {
+      if ((error as { name?: string }).name === 'AbortError') {
+        return
+      }
       setStatus(errorStatus('historyExportFailed', error))
     } finally {
       setBusy(false)
@@ -634,7 +522,7 @@ const ExportHistory = ({ disabled }: { disabled: boolean }) => {
           variant="outlined"
           size="m"
           className={styles.cellButton}
-          disabled={disabled || busy || empty}
+          disabled={disabled || busy}
           onClick={() => void onExport()}
         >
           <IconDownloadOutline16 />
