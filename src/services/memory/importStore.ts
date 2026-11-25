@@ -35,8 +35,14 @@ export interface CreateBlanketOptions extends BlanketDistillOptions {
   name?: string
 }
 
+export interface CreateBlanketResult {
+  record: BlanketRecord
+  /** 蒸馏全部成功调用的实际 token 总量——账本按这个实记（2026-11-25 对账修正） */
+  usage: { promptTokens: number; completionTokens: number }
+}
+
 /** 蒸馏 → 原文入库 → 被子记录。任一步失败都会把刚写的原料清掉，不留半床被子。 */
-export const createBlanket = async (options: CreateBlanketOptions): Promise<BlanketRecord> => {
+export const createBlanket = async (options: CreateBlanketOptions): Promise<CreateBlanketResult> => {
   const { parsedSessions, apiKey, name, onProgress } = options
   const result = await runBlanketDistill(parsedSessions, { apiKey, onProgress })
 
@@ -68,5 +74,5 @@ export const createBlanket = async (options: CreateBlanketOptions): Promise<Blan
     throw e
   }
   invalidateBlanket(id)
-  return record
+  return { record, usage: result.usage }
 }

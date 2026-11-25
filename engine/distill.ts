@@ -479,6 +479,12 @@ export interface DistillRunResult {
   coreCandidates: DistillMemory[];
   blockResults: DistillBlockResult[];
   summarize: DistillSummarizeResult;
+  /**
+   * 全部成功调用的实际 token 总量（块 + 汇总求和）——账本按这个实记，
+   * 不再用 estimate 的谷价预估（2026-11-25 对账：峰时蒸馏低估近一半）。
+   * 失败/重试中被丢弃的调用拿不到 usage，官方若计费则此处略低估（保守方向相反，可接受）。
+   */
+  usage: { promptTokens: number; completionTokens: number };
 }
 
 /**
@@ -613,5 +619,12 @@ export async function runDistill(
     voiceSamples: summarize.voiceSamples ?? [],
   });
 
-  return { pack, coreCandidates: summarize.coreCandidates, blockResults: results, summarize };
+  const usage = [...results, summarize].reduce(
+    (acc, r) => ({
+      promptTokens: acc.promptTokens + (r.usage?.promptTokens ?? 0),
+      completionTokens: acc.completionTokens + (r.usage?.completionTokens ?? 0),
+    }),
+    { promptTokens: 0, completionTokens: 0 },
+  );
+  return { pack, coreCandidates: summarize.coreCandidates, blockResults: results, summarize, usage };
 }

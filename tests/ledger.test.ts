@@ -112,3 +112,53 @@ describe('保守方向纪律（2026-11-25 拍板：宁可稍微贵点，也别�
     expect((writes[0] as { cost: number }).cost).toBeCloseTo(1, 10)
   })
 })
+
+describe('蒸馏记账（2026-11-25 对账修正：实际 usage + 峰谷实价，不再是谷价预估）', () => {
+  const captureDistillWrite = async (): Promise<{
+    rec: typeof import('../src/services/usage/ledger.js').recordDistillUsage
+    writes: Record<string, unknown>[]
+  }> => {
+    const writes: Record<string, unknown>[] = []
+    vi.doMock('../src/services/chat/db.js', () => ({
+      addUsageLog: async (entry: Record<string, unknown>) => {
+        writes.push(entry)
+      },
+      loadUsageLog: async () => [],
+      loadUsageTotal: async () => ({ total: 0, count: 0 }),
+    }))
+    vi.resetModules()
+    const { recordDistillUsage: rec } = await import('../src/services/usage/ledger.js')
+    return { rec, writes }
+  }
+
+  it('峰时蒸馏：prompt 全按未命中峰价、输出按输出峰价（当天实测低估的根因）', async () => {
+    const { rec, writes } = await captureDistillWrite()
+    // 16:02 蒸馏（峰），prompt 1 万 / 输出 5 千——对账实测 ¥0.107（谷价预估）vs 官方 ¥0.15
+    await rec(10_000, 5_000, beijing(2026, 11, 25, 16, 2).getTime())
+    expect(writes).toHaveLength(1)
+    const entry = writes[0] as { miss: number; hit: number; completion: number; peak: boolean; cost: number }
+    expect(entry.miss).toBe(10_000)
+    expect(entry.hit).toBe(0)
+    expect(entry.completion).toBe(5_000)
+    expect(entry.peak).toBe(true)
+    expect(entry.cost).toBeCloseTo((10_000 / 1_000_000) * 2 + (5_000 / 1_000_000) * 8, 12)
+  })
+
+  it('开始谷、结束峰：整笔记峰（与巩固/聊天同口径）', async () => {
+    const { rec, writes } = await captureDistillWrite()
+    await rec(
+      1_000_000,
+      0,
+      beijing(2026, 11, 25, 13, 55).getTime(),
+      beijing(2026, 11, 25, 14, 5).getTime()
+    )
+    expect((writes[0] as { peak: boolean }).peak).toBe(true)
+    expect((writes[0] as { cost: number }).cost).toBeCloseTo(2, 10)
+  })
+
+  it('tokens 全零：不记（没有任何成功调用就没花钱）', async () => {
+    const { rec, writes } = await captureDistillWrite()
+    await rec(0, 0, Date.now())
+    expect(writes).toHaveLength(0)
+  })
+})

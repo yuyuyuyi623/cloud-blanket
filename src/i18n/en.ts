@@ -292,7 +292,7 @@ export const en = {
   blanketImportBillCost: 'Estimated cost',
   blanketImportBillCostValue: 'about ¥{cost} · about {minutes} min',
   blanketImportConfirmNote:
-    'Estimated at the uncached price ceiling, usually lower in practice. A failed block retries automatically; restarting after a full failure costs again, finished blocks are never charged twice.',
+    'Estimated at off-peak prices; weekdays 9–12 / 14–18 (Beijing time) are peak hours, roughly ×2. Actual charge is recorded in the Ledger from real usage after distillation. A failed block retries automatically; restarting after a full failure costs again, finished blocks are never charged twice.',
   distillErrUnauthorized: 'The API Key is wrong or revoked: fill in a fresh one in Settings → API Key, then start again.',
   distillErrBalance: 'Not enough DeepSeek balance: top up at platform.deepseek.com, then start again (finished blocks are never charged twice).',
   distillErrRateLimited: 'Rate limited — wait a minute or two, then start again.',

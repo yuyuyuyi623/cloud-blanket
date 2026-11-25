@@ -27,7 +27,7 @@ import { createBlanket } from './importStore.js'
 import { refreshBlankets } from './blanketStore.js'
 import { describeDistillError, describeScanError } from './describeImportError.js'
 import { recordError } from '../diagnostics/errorLog.js'
-import { recordDistillCost } from '../usage/ledger.js'
+import { recordDistillUsage } from '../usage/ledger.js'
 import { translate } from '../../i18n/index.js'
 
 export type ImportStep = 'pick' | 'scanning' | 'select' | 'confirm' | 'running' | 'done'
@@ -277,19 +277,21 @@ export const startDistill = async (apiKey: string): Promise<void> => {
     return
   }
   useBlanketImport.setState({ step: 'running', error: null, progress: null })
+  const distillStartedAt = Date.now()
   try {
     const ids = new Set(selected)
     const loaded = await readSelectedSessions(file, ids)
     if (!loaded.sessions.length) {
       throw new Error('选中的会话没有读出正文，请重新选择文件')
     }
-    const record = await createBlanket({
+    const { record, usage } = await createBlanket({
       apiKey,
       parsedSessions: loaded.sessions,
       onProgress: (progress) => useBlanketImport.setState({ progress }),
     })
-    // 蒸馏记一笔账：金额用确认页那个预估实付（engine/estimate 口径），完成时刻判峰谷
-    void recordDistillCost(planFor(loaded.sessions, selected).estimate.costCny)
+    // 蒸馏记一笔：按蒸馏返回的实际 token 记账（2026-11-25 对账修正——
+    // 原来记 estimate 谷价预估，峰时低估近一半），峰谷取开始/结束任一落峰
+    void recordDistillUsage(usage.promptTokens, usage.completionTokens, distillStartedAt)
     // 侧栏"我的被子"立刻能看到新盖的这床
     void refreshBlankets()
     useBlanketImport.setState({

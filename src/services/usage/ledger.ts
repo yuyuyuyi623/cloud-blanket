@@ -94,13 +94,34 @@ export const recordMessageUsage = async (
   })
 }
 
-/** 蒸馏记一笔：金额用导入确认页算出的预估实付（engine/estimate 的口径），完成时刻判峰谷 */
-export const recordDistillCost = async (costCny: number, ts: number = Date.now()): Promise<void> => {
-  if (!(costCny > 0)) {
+/**
+ * 蒸馏记一笔（2026-11-25 对账修正）：改用蒸馏返回的**实际 usage**（块 + 汇总求和），
+ * 不再用 estimate 的谷价预估——峰时按谷价记会低估近一半（实测 ¥0.107 vs 官方 ¥0.15）。
+ * 口径与巩固一致（保守三件）：prompt 不分命中/未命中全按未命中价、峰谷取开始/结束任一落峰。
+ * 失败/被丢弃的调用拿不到 usage，官方若计费则略低估——已知边界，记在 runDistill 注释里。
+ */
+export const recordDistillUsage = async (
+  promptTokens: number,
+  completionTokens: number,
+  startTs: number,
+  endTs: number = Date.now()
+): Promise<void> => {
+  const final = {
+    hit: 0,
+    miss: promptTokens,
+    completion: completionTokens,
+  }
+  if (!(final.miss + final.completion > 0)) {
     return
   }
-  const peak = isPeakHours(new Date(ts))
-  await addUsageLog({ ts, mode: 'distill', hit: 0, miss: 0, completion: 0, peak, cost: costCny })
+  const peak = isPeakHours(new Date(startTs)) || isPeakHours(new Date(endTs))
+  await addUsageLog({
+    ts: endTs,
+    mode: 'distill',
+    ...final,
+    peak,
+    cost: estimateCost(final, peak),
+  })
 }
 
 /**

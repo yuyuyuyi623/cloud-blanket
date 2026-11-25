@@ -286,7 +286,7 @@ export const zh = {
   blanketImportBillCost: '预估花费',
   blanketImportBillCostValue: '约 ¥{cost} · 约 {minutes} 分钟',
   blanketImportConfirmNote:
-    '按未命中缓存的价格上限估算，实际通常更低。中途某一块失败会自动重试；整条失败后重新开始会再花一次，不会重复扣已成功的块。',
+    '按谷价估算，工作日 9–12 / 14–18 点为峰价约 ×2；实际金额以账本为准（蒸馏完成后按实际用量记）。中途某一块失败会自动重试；整条失败后重新开始会再花一次，不会重复扣已成功的块。',
   distillErrUnauthorized: 'API Key 不对或已经失效：去「设置 → API Key」重新填一个，再点开始蒸馏',
   distillErrBalance: 'DeepSeek 账户余额不足：去 platform.deepseek.com 充点值，回来再点开始蒸馏（已成功的块不会重扣）',
   distillErrRateLimited: '请求太密被限流了：歇一两分钟再点开始蒸馏',
