@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { createHash } from 'node:crypto'
 import {
   CONSOLIDATE_MIN_CHARS,
   CONSOLIDATE_MIN_MESSAGES,
@@ -187,3 +188,44 @@ describe('B1 印象字数（2026-11-25 拍板：prompt 100 / 存 120）', () => 
     expect(IMPRESSION_PROMPT_CHARS).toBeLessThan(IMPRESSION_CHARS)
   })
 })
+
+describe('③ 原声红线：巩固不碰 voiceSamples（2026-11-25 拍板）', () => {
+  it('巩固跑完，voiceSamples 的 JSON 哈希不变（模型塞了新样本也一样）', () => {
+    const voiceSamples = [
+      { quote: '你活该，谁让你接的活', userQuote: '加班好累啊', scene: '他在抱怨加班' },
+      { quote: '睡不着就给我打电话啊', userQuote: '睡不着', scene: '他睡不着' },
+    ]
+    const pack = makePack({ voiceSamples })
+    const before = hash(JSON.stringify(pack.voiceSamples))
+
+    const result = mergeConsolidation(
+      pack,
+      {
+        memories: ['新事件'],
+        impression: '他们最近更熟了',
+        // 模型"顺手"塞了样本：必须被无视（原声唯一合法来源是原始导出包）
+        voiceSamples: [{ quote: '被子对话里我随口说的一句' }],
+      } as Parameters<typeof mergeConsolidation>[1],
+      new Date(),
+      { impressionAuto: true }
+    )
+
+    expect(hash(JSON.stringify(result.pack.voiceSamples))).toBe(before)
+    expect(result.pack.voiceSamples).toEqual(voiceSamples)
+  })
+
+  it('seedTurns 也不被巩固改动（续接历史随真实对话退场，不回流）', () => {
+    const seedTurns = [
+      { role: 'user' as const, text: '上次聊到哪了', at: '2026-01-01' },
+      { role: 'assistant' as const, text: '聊到你搬家', at: '2026-01-01' },
+    ]
+    const pack = makePack({ seedTurns })
+    const result = mergeConsolidation(pack, { memories: ['新事件'] }, new Date(), {
+      impressionAuto: false,
+    })
+    expect(hash(JSON.stringify(result.pack.seedTurns))).toBe(hash(JSON.stringify(seedTurns)))
+  })
+})
+
+/** 稳定哈希：只用来断言"一个字都没动" */
+const hash = (text: string): string => createHash('sha256').update(text).digest('hex')

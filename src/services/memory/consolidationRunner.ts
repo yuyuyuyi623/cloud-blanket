@@ -160,6 +160,10 @@ export const mergeConsolidation = (
     facts,
     coreMemories,
     persona: { ...pack.persona, impression: impression || undefined },
+    // ③ 原声红线（2026-11-25 拍板，同轮落地）：voiceSamples 是**冻结区**，
+    // 巩固只许原样带过——不读、不写、不合并、不"顺手补一条"。
+    // 模型就算在输出里塞了 voiceSamples 也一律无视（唯一合法来源是原始导出包）。
+    voiceSamples: pack.voiceSamples,
   })
 
   return {

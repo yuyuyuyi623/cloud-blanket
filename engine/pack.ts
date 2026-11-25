@@ -355,11 +355,13 @@ export function normalizeVoiceSamples(raw: unknown): VoiceSample[] {
     if (out.length >= SAMPLES_LIMIT || chars + cost > SAMPLES_MAX_CHARS) break;
     seen.add(quote);
     chars += cost;
+    // at 只在真有值时写出：normalize 是幂等的，不凭空多出一个 at: null（哈希单测锁这个）
+    const at = normalizeAt(o.at);
     out.push({
       quote,
       ...(userQuote ? { userQuote } : {}),
       ...(scene ? { scene } : {}),
-      at: normalizeAt(o.at),
+      ...(at ? { at } : {}),
     });
   }
   return out;
