@@ -61,6 +61,86 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* ── 顶栏 tab（账本方案 §二）：她的角落 / 账本 ─────── */
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 12px;
+  padding: 2px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 10px;
+  background: var(--cb-card-bg);
+}
+
+.tab {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 6px 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.tab:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.tabActive {
+  background: var(--cb-card-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+/* ── 备份/恢复区块（她的角落底部）────────────────── */
+
+.backupBlock {
+  margin-top: 16px;
+  padding-top: 4px;
+  border-top: 1px solid var(--cb-card-border);
+}
+
+.backupBlock .entry span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backupBlock .entry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.backupConfirm {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--dsw-alias-status-danger);
+  border-radius: 9px;
+}
+
+.backupWarning {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-status-danger);
+}
+
+.backupConfirmRow {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.backupNote {
+  margin: 6px 0 0;
+  font-size: 10px;
+  line-height: 15px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 .panelBlanket {
   margin-bottom: 10px;
   overflow: hidden;

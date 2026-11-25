@@ -35,6 +35,9 @@ const KEYS = {
   siderCollapsed: 'chat-demo:sider-collapsed',
 } as const
 
+/** 备份/恢复要读写全部设置键；从这里出，避免备份侧自己抄一份清单后两处漂移。 */
+export const SETTINGS_KEYS: readonly string[] = Object.values(KEYS)
+
 const read = (key: string) => {
   try {
     return localStorage.getItem(key)

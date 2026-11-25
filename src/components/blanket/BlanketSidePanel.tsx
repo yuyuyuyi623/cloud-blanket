@@ -1,13 +1,11 @@
 /**
- * 全局右上角："她的角落"。
- *
- * 点右上角的图标按钮，从右边滑出一小条侧栏：
- *   · 正在被子的对话里 → 两个入口：角色卡、她的日记；
- *   · 不在被子的对话里 → 一行说明 + 盖好的被子列表（点一床直接看她的记忆）。
+ * 全局右上角：右侧抽屉，顶栏两个 tab（账本方案 §二）。
+ *   · 「她的角落」：被子对话里 → 角色卡、她的日记；不在被子会话里 → 说明 + 被子列表 + 回收站 + 备份/恢复；
+ *   · 「账本」：花销仪表板（v1.0.1 后续填入，本版先占位）。
  * 弹窗从抽屉里点开后抽屉自动收起，不留两层叠在一起的界面。
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { useChatStore } from '../../services/chat/store.js'
 import { setBlanketStyle, useSettings, type BlanketStyle } from '../../services/settings.js'
@@ -22,6 +20,8 @@ import { IconBookOutline16, IconCloudOutline16, IconCopyOutline16, IconUserOutli
 import { showToast } from '../base/toastState.js'
 import { copyText } from '../../utils/clipboard.js'
 import { buildErrorLogText } from '../../services/diagnostics/errorLog.js'
+import { exportBackup, restoreBackup } from '../../services/backup/backup.js'
+import { reportStorageError } from '../../services/chat/db.js'
 import { BlanketDetail } from './BlanketDetail.js'
 import { DiaryDialog } from './DiaryDialog.js'
 import styles from './BlanketSidePanel.module.css'
@@ -29,6 +29,13 @@ import styles from './BlanketSidePanel.module.css'
 export const BlanketSidePanel = () => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
+  /** 抽屉顶栏 tab（账本方案 §二）：默认她的角落 */
+  const [tab, setTab] = useState<'corner' | 'ledger'>('corner')
+  /** 备份导出中 / 恢复两步确认的待恢复文件 */
+  const [backupBusy, setBackupBusy] = useState(false)
+  const [pendingRestore, setPendingRestore] = useState<File | null>(null)
+  const restoreInputRef = useRef<HTMLInputElement>(null)
+  const recordBackupError = reportStorageError('backup')
   /** 弹窗里显示的被子 id（卡片和日记各一个） */
   const [cardId, setCardId] = useState<string | null>(null)
   const [diaryId, setDiaryId] = useState<string | null>(null)
@@ -52,6 +59,35 @@ export const BlanketSidePanel = () => {
     }
   }, [])
 
+  const doExport = async () => {
+    setBackupBusy(true)
+    try {
+      await exportBackup(__APP_VERSION__ ?? '')
+      showToast({ key: 'backupDone' })
+    } catch (error) {
+      if ((error as { name?: string }).name === 'AbortError') {
+        return
+      }
+      recordBackupError(error)
+      showToast({ key: 'backupFailed', type: 'error' })
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  const doRestore = async (file: File) => {
+    setBackupBusy(true)
+    try {
+      await restoreBackup(file)
+      // 恢复后内存态全部作废（会话列表、被子缓存、设置），重载页面重建，最干净
+      window.location.reload()
+    } catch (error) {
+      recordBackupError(error)
+      showToast({ key: 'backupRestoreFailed', type: 'error' })
+      setBackupBusy(false)
+    }
+  }
+
   return (
     <>
       <button
@@ -68,7 +104,28 @@ export const BlanketSidePanel = () => {
         <>
           <div className={styles.backdrop} onClick={() => setOpen(false)} />
           <aside className={styles.panel}>
-            <div className={styles.panelTitle}>{t('blanketPanelTitle')}</div>
+            <div className={styles.tabs}>
+              <button
+                type="button"
+                className={tab === 'corner' ? styles.tabActive : styles.tab}
+                aria-pressed={tab === 'corner'}
+                onClick={() => setTab('corner')}
+              >
+                {t('cornerTab')}
+              </button>
+              <button
+                type="button"
+                className={tab === 'ledger' ? styles.tabActive : styles.tab}
+                aria-pressed={tab === 'ledger'}
+                onClick={() => setTab('ledger')}
+              >
+                {t('ledgerTab')}
+              </button>
+            </div>
+            {tab === 'ledger' ? (
+              <p className={styles.panelEmpty}>{t('ledgerTabEmpty')}</p>
+            ) : (
+            <>
             {current ? (
               <>
                 <div className={styles.panelBlanket}>{current.name}</div>
@@ -164,6 +221,66 @@ export const BlanketSidePanel = () => {
               <span>{t('errorLogCopy')}</span>
             </button>
 
+            {/* 备份/恢复（v1.0.1 P0）：换手机/清缓存/换域名都会数据清零，这里是一键带走全部的口子 */}
+            <div className={styles.backupBlock}>
+              <div className={styles.trashTitle}>{t('backupTitle')}</div>
+              <button
+                type="button"
+                className={styles.entry}
+                disabled={backupBusy}
+                onClick={() => void doExport()}
+              >
+                <span>{backupBusy ? t('backupExporting') : t('backupExport')}</span>
+              </button>
+              <button
+                type="button"
+                className={styles.entry}
+                disabled={backupBusy}
+                onClick={() => restoreInputRef.current?.click()}
+              >
+                <span>{t('backupRestore')}</span>
+              </button>
+              {pendingRestore ? (
+                <div className={styles.backupConfirm}>
+                  <p className={styles.backupWarning}>{t('backupRestoreWarning')}</p>
+                  <div className={styles.backupConfirmRow}>
+                    <button
+                      type="button"
+                      className={styles.trashBtn}
+                      onClick={() => setPendingRestore(null)}
+                    >
+                      {t('backupRestoreCancel')}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.trashBtnDanger}
+                      onClick={() => {
+                        const file = pendingRestore
+                        setPendingRestore(null)
+                        if (file) {
+                          void doRestore(file)
+                        }
+                      }}
+                    >
+                      {t('backupRestoreConfirm')}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <p className={styles.backupNote}>{t('backupNote')}</p>
+              <input
+                ref={restoreInputRef}
+                type="file"
+                accept=".zip,application/zip"
+                hidden
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  event.target.value = ''
+                  setPendingRestore(file)
+                }}
+              />
+            </div>
+
             {/* 界面风格一键切换：不用进设置翻，点一下立刻变色 */}
             <div className={styles.styleRow}>
               <span className={styles.styleLabel}>{t('blanketPanelStyleLabel')}</span>
@@ -188,6 +305,8 @@ export const BlanketSidePanel = () => {
                 ))}
               </div>
             </div>
+            </>
+            )}
           </aside>
         </>
       ) : null}

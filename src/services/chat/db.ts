@@ -411,3 +411,82 @@ export const reportStorageError = (action: string) => (error: unknown) => {
   // eslint-disable-next-line no-console
   console.error(`[storage] ${action} failed`, error)
 }
+
+// ── 备份/恢复（v1.0.1 P0：清缓存/换手机/换域名都会数据清零）──
+
+/** 参与备份的四个正式 store；sessionSummaries 不备份（可从 sessions 重建），暂存不备份 */
+type BackupStoreName = 'sessions' | 'files' | 'blankets' | 'blanketSessions'
+type BackupStoreValue = {
+  sessions: Session
+  files: StoredFile
+  blankets: BlanketRecord
+  blanketSessions: BlanketSessionRecord
+}
+
+/**
+ * 游标遍历一个 store 的全部记录。
+ * 备份用：几百个会话逐条过，别 getAll 一次性进内存（手机 JS 堆约 400MB）。
+ * visit 里只做同步工作或同一事务内的读取——跨事务的 await 会让游标事务提前失效。
+ */
+export const iterateStore = async <N extends BackupStoreName>(
+  name: N,
+  visit: (value: BackupStoreValue[N]) => Promise<void> | void,
+): Promise<number> => {
+  const tx = (await getDB()).transaction(name, 'readonly')
+  let count = 0
+  for (
+    let cursor = await tx.objectStore(name).openCursor();
+    cursor;
+    cursor = await cursor.continue()
+  ) {
+    await visit(cursor.value as BackupStoreValue[N])
+    count += 1
+  }
+  await tx.done
+  return count
+}
+
+export interface RestorePayload {
+  sessions: Session[]
+  files: StoredFile[]
+  blankets: BlanketRecord[]
+  blanketSessions: BlanketSessionRecord[]
+}
+
+/**
+ * 恢复备份 = 整体覆盖（合并语义太容易错，第一版不做）。
+ * 单事务里清空四个正式 store 后写回，sessionSummaries 从 sessions 重建；
+ * 失败整体回滚，现有数据保持原样。
+ */
+export const restoreFromBackup = guarded(async (payload: RestorePayload): Promise<void> => {
+  const storeNames = [
+    'sessions',
+    'files',
+    'blankets',
+    'blanketSessions',
+    'sessionSummaries',
+  ] as const
+  const tx = (await getDB()).transaction(storeNames, 'readwrite')
+  try {
+    for (const name of storeNames) {
+      await tx.objectStore(name).clear()
+    }
+    for (const session of payload.sessions) {
+      await tx.objectStore('sessions').put(session)
+      await tx.objectStore('sessionSummaries').put(storedSummary(session))
+    }
+    for (const file of payload.files) {
+      await tx.objectStore('files').put(file)
+    }
+    for (const blanket of payload.blankets) {
+      await tx.objectStore('blankets').put(blanket)
+    }
+    for (const record of payload.blanketSessions) {
+      await tx.objectStore('blanketSessions').put(record)
+    }
+  } catch (error) {
+    abortTransaction(tx)
+    throw error
+  }
+  await tx.done
+})
