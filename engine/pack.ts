@@ -18,12 +18,37 @@ import {
   FACTS_LIMIT,
   IMPRESSION_CHARS,
   PERSONA_MAX_CHARS,
+  SAMPLES_LIMIT,
+  SAMPLES_MAX_CHARS,
+  SAMPLES_QUOTE_CHARS,
+  SAMPLES_USER_QUOTE_CHARS,
   SUMMARY_MAX_CHARS,
   TEXT_OVERFLOW_RATIO,
 } from './config.js';
 import { softClip } from './brief.js';
 
 // ── 类型 ─────────────────────────────────────────────────────
+
+/**
+ * 原声样本（v1.0.2 层一，A5）：配对语境 + 她的原话。
+ *
+ * 为什么配对、但不存完整对话对：完整多轮会把 token 翻倍，还会让模型连对方的语气一起模仿；
+ * 单句对方原话（≤30 字）只提供真实场合。配对是为了语境，不是为了模仿对方。
+ * 孤立句（找不到上文）直接不选，宁缺毋滥。
+ *
+ * 红线：quote/userQuote 必须是**原始导出包里的原文**（空白归一后命中即可，落库存原文那份）；
+ * 被子对话不补样本（自我回声/近亲繁殖）。
+ */
+export interface VoiceSample {
+  /** 对方那句话，≤ SAMPLES_USER_QUOTE_CHARS 字，原话截短（允许脱敏替换） */
+  userQuote?: string;
+  /** 她的原话，≤ SAMPLES_QUOTE_CHARS 字，一字不改（只允许脱敏替换） */
+  quote: string;
+  /** 第三人称场合短语（≤30 字），确认页展示用 */
+  scene?: string;
+  /** 原料里的时间，可空 */
+  at?: string | null;
+}
 
 /** 核心记忆（E1/E4）：最多 5 条、永不淘汰、带时间感 */
 export interface CoreMemory {
@@ -32,8 +57,7 @@ export interface CoreMemory {
   at: string | null;
 }
 
-/** 事件层（N1）：具体发生过的事；append-only，只增不删不改（forget 已在 v1.0.2 删除） */
-export interface MemoryEpisode {
+/** 事件层（N1）：具体发生过的事；append-only，只增不删不改（forget 已在 v1.0.2 删除） */export interface MemoryEpisode {
   text: string;
   at: string | null;
   /**
@@ -76,6 +100,11 @@ export interface MemoryPack {
   facts: Fact[];
   summary: string;
   diary: DiaryEntry[];
+  /**
+   * 原声样本（v1.0.2 层一，A5）：**冻结区**——巩固不碰，重蒸才更新。
+   * 唯一合法来源是原始导出包里的 assistant 消息；被子对话不补样本（红线，见方案 §③）。
+   */
+  voiceSamples?: VoiceSample[];
 }
 
 // ── 内部工具 ─────────────────────────────────────────────────
@@ -287,8 +316,39 @@ export function normalizeFacts(raw: unknown): Fact[] {
   return out;
 }
 
-function normalizeDiary(raw: unknown): DiaryEntry[] {
+/**
+ * 原声样本（A5）：
+ * - quote 必需、一字不改（只截到 SAMPLES_QUOTE_CHARS）、同文去重；
+ * - userQuote/scene 可选，各自截断；
+ * - 条数 ≤ SAMPLES_LIMIT、总字数 ≤ SAMPLES_MAX_CHARS（先到为准，预算硬约束）。
+ */
+export function normalizeVoiceSamples(raw: unknown): VoiceSample[] {
   if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: VoiceSample[] = [];
+  let chars = 0;
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as Record<string, unknown>;
+    const quote = typeof o.quote === 'string' ? o.quote.trim().slice(0, SAMPLES_QUOTE_CHARS) : '';
+    if (!quote || seen.has(quote)) continue;
+    const userQuote = typeof o.userQuote === 'string' ? o.userQuote.trim().slice(0, SAMPLES_USER_QUOTE_CHARS) : '';
+    const scene = typeof o.scene === 'string' ? o.scene.trim().slice(0, 30) : '';
+    const cost = quote.length + userQuote.length + scene.length;
+    if (out.length >= SAMPLES_LIMIT || chars + cost > SAMPLES_MAX_CHARS) break;
+    seen.add(quote);
+    chars += cost;
+    out.push({
+      quote,
+      ...(userQuote ? { userQuote } : {}),
+      ...(scene ? { scene } : {}),
+      at: normalizeAt(o.at),
+    });
+  }
+  return out;
+}
+
+function normalizeDiary(raw: unknown): DiaryEntry[] {  if (!Array.isArray(raw)) return [];
   const out: DiaryEntry[] = [];
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
@@ -333,6 +393,7 @@ export function normalizePack(raw: unknown): MemoryPack {
         ? softClip(o.summary.trim(), SUMMARY_MAX_CHARS, TEXT_OVERFLOW_RATIO)
         : '',
     diary: normalizeDiary(o.diary),
+    voiceSamples: normalizeVoiceSamples(o.voiceSamples),
   };
 }
 

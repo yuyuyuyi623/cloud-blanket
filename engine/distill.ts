@@ -29,6 +29,11 @@ import {
   IMPRESSION_CHARS,
   IMPRESSION_PROMPT_CHARS,
   PERSONA_MAX_CHARS,
+  SAMPLES_PER_BLOCK,
+  SAMPLES_LIMIT,
+  SAMPLES_MAX_CHARS,
+  SAMPLES_QUOTE_CHARS,
+  SAMPLES_USER_QUOTE_CHARS,
   SUMMARY_MAX_CHARS,
   CONSOLIDATION_TEMPERATURE,
 } from './config.js';
@@ -45,6 +50,7 @@ import {
   normalizeFacts,
   normalizePack,
   type MemoryPack,
+  type VoiceSample,
 } from './pack.js';
 import type { ParsedMessage } from './parse.js';
 
@@ -81,6 +87,10 @@ export interface DistillBlockResult {
   factsRelationship: string[];
   /** 事件候选（带时间） */
   memories: DistillMemory[];
+  /** 原声样本候选（A5：已通过原文硬校验，存的是原文那份） */
+  voiceSamples?: VoiceSample[];
+  /** 样本校验台账：候选 N 条 / 命中 M 条（M=0 要 warn，丢弃要留痕） */
+  voiceStats?: { candidates: number; hits: number };
   /** 用量（预估页对账用） */
   usage?: { promptTokens?: number; completionTokens?: number };
 }
@@ -127,11 +137,12 @@ export function buildBlockMessages(block: DistillBlockInput): ChatMessage[] {
 3. factsUser：对方的稳定信息——偏好、习惯、正在做的事、重要关系、计划、边界。每条不超过 ${FACTS_PROMPT_CHARS} 字，一条只说一件事，不把几件事挤进一条。不写「今天」「昨天」「最近」这类相对时间，需要时间就写具体日期；审核或讨论里得出的判断（如「确认某物是真实食物」）不算对方的稳定信息，不写。
 4. factsRelationship：关系层面的事实——怎么认识、发展到哪一步、约定、矛盾、现状。每条不超过 ${FACTS_PROMPT_CHARS} 字，同样一条只说一件事、不写相对时间。
 5. memories：具体发生过的事（最多 8 条），text 写清什么时候、发生了什么（不超过 ${EPISODES_CHARS} 字），带时间 at（YYYY-MM-DD，记录里有就写，没有写 null）；每条还要给一个 brief，用记录里那个角色的口吻把这件事说成一句话，不超过 ${BRIEF_CHARS} 字，读起来要像人随口提起，不要为省字写成电报。
+6. voiceSamples：这段记录里最能看出"她怎么说话"的原话，2~3 条。**quote 必须一字不改照抄她的原句**（只许截短到 ${SAMPLES_QUOTE_CHARS} 字以内，不许润色、不许改标点、不许合并两句）；每条再带上她那句话前面紧接着的对方那一句作 userQuote（原话截短到 ${SAMPLES_USER_QUOTE_CHARS} 字以内，找不到上文的那条就不要选）。优先挑有情绪、有梗、有口头禅、护着/损着对方的句子；不要挑信息型长回答。scene 用一个第三人称短语（不超过 30 字）说明当时的场合。
 
 密码、密钥、账号、支付信息、精确住址不进任何字段。没有依据的字段返回空数组，没有依据的内容不写。
 
 输出严格 JSON，不要 Markdown：
-{"summary":"...","persona":["..."],"factsUser":["..."],"factsRelationship":["..."],"memories":[{"text":"...","brief":"...","at":"YYYY-MM-DD 或 null"}]}`;
+{"summary":"...","persona":["..."],"factsUser":["..."],"factsRelationship":["..."],"memories":[{"text":"...","brief":"...","at":"YYYY-MM-DD 或 null"}],"voiceSamples":[{"scene":"...","userQuote":"...","quote":"..."}]}`;
 
   return [
     { role: 'system', content: system },
@@ -139,7 +150,42 @@ export function buildBlockMessages(block: DistillBlockInput): ChatMessage[] {
   ];
 }
 
-function parseBlockResult(blockIndex: number, raw: unknown): DistillBlockResult {
+/**
+ * 空白归一 + 位置映射：模型抄原话时经常多打/少打空格、把全角标点换成半角，
+ * 严格 indexOf 会误杀真原文；两边都 `trim().replace(/\s+/g,'')` 再比，命中后
+ * 用映射回到**原文位置**，落库存原文那一份（A5 硬校验，拍板回复 三·③）。
+ */
+const normalizeWithMap = (text: string): { norm: string; map: number[] } => {
+  let norm = '';
+  const map: number[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch === undefined || /\s/.test(ch)) continue;
+    norm += ch;
+    map.push(i);
+  }
+  return { norm, map };
+};
+
+const normalizeQuote = (text: string): string => text.replace(/\s+/g, '').trim();
+
+/**
+ * 在一段原文里找回模型抄的那句话，返回**原文里的那一段**（不是归一化后的）；找不到返回 null。
+ * 校验失败就丢弃，不许把模型的"润色版"当原声用。
+ */
+export function findVerbatim(blockText: string, quote: string): string | null {
+  const needle = normalizeQuote(quote);
+  if (!needle) return null;
+  const { norm, map } = normalizeWithMap(blockText);
+  const at = norm.indexOf(needle);
+  if (at < 0) return null;
+  const start = map[at];
+  const last = map[at + needle.length - 1];
+  if (start === undefined || last === undefined) return null;
+  return blockText.slice(start, last + 1);
+}
+
+function parseBlockResult(block: DistillBlockInput, raw: unknown): DistillBlockResult {
   const o = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const strList = (v: unknown, cap: number): string[] =>
     Array.isArray(v)
@@ -164,13 +210,43 @@ function parseBlockResult(blockIndex: number, raw: unknown): DistillBlockResult 
         .filter((x): x is DistillMemory => x !== null)
         .slice(0, 8)
     : [];
+  // 原声样本（A5）：模型挑 + 代码硬校验——quote/userQuote 必须在这块原文里精确命中
+  const rawSamples = Array.isArray(o.voiceSamples) ? (o.voiceSamples as unknown[]) : [];
+  const voiceSamples: VoiceSample[] = [];
+  for (const item of rawSamples) {
+    const s = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    const quoteRaw = typeof s.quote === 'string' ? s.quote.trim() : '';
+    const userQuoteRaw = typeof s.userQuote === 'string' ? s.userQuote.trim() : '';
+    if (!quoteRaw) continue;
+    const quote = findVerbatim(block.text, quoteRaw);
+    // 配对是硬要求（孤立句没有场合锚，模型会照着语气乱套）：找不到上文就不选
+    const userQuote = userQuoteRaw ? findVerbatim(block.text, userQuoteRaw) : null;
+    if (!quote || !userQuote) continue;
+    const scene = typeof s.scene === 'string' ? s.scene.trim().slice(0, 30) : '';
+    // 时间从原文那一行取（块正文格式固定：`她（YYYY-MM-DD）：…`）
+    const lineBegin = block.text.lastIndexOf('\n', block.text.indexOf(quote)) + 1;
+    const lineEndRaw = block.text.indexOf('\n', block.text.indexOf(quote));
+    const line = block.text.slice(lineBegin, lineEndRaw < 0 ? undefined : lineEndRaw);
+    const at = line.match(/（(\d{4}-\d{2}-\d{2})）/)?.[1] ?? null;
+    voiceSamples.push({
+      quote: quote.slice(0, SAMPLES_QUOTE_CHARS),
+      userQuote: userQuote.slice(0, SAMPLES_USER_QUOTE_CHARS),
+      ...(scene ? { scene } : {}),
+      at,
+    });
+    if (voiceSamples.length >= SAMPLES_PER_BLOCK) break;
+  }
+
   return {
-    blockIndex,
+    blockIndex: block.blockIndex,
     summary: typeof o.summary === 'string' ? o.summary.trim().slice(0, 600) : '',
     personaFragments: strList(o.persona, 20),
     factsUser: strList(o.factsUser, FACTS_LIMIT),
     factsRelationship: strList(o.factsRelationship, FACTS_LIMIT),
     memories,
+    voiceSamples,
+    // 丢弃必须留痕：M=0 时"模型全程润色"和"原料本来就没样本"长得一样（拍板回复 三·③）
+    voiceStats: { candidates: rawSamples.filter((x) => x && typeof x === 'object').length, hits: voiceSamples.length },
   };
 }
 
@@ -188,7 +264,7 @@ export async function distillBlock(
   };
   const result = await client.chat(buildBlockMessages(block), options);
   return {
-    ...parseBlockResult(block.blockIndex, parseJsonObject(result.content)),
+    ...parseBlockResult(block, parseJsonObject(result.content)),
     firstAt: block.firstAt ?? null,
     lastAt: block.lastAt ?? null,
     usage: { promptTokens: result.promptTokens, completionTokens: result.completionTokens },
@@ -212,7 +288,49 @@ export interface DistillSummarizeResult {
   /** 合并去重后的全部事实 */
   factsUser: string[];
   factsRelationship: string[];
+  /** 原声样本（已按候选池校验：只可能是块调用里命中的原文，模型改写的一律丢弃） */
+  voiceSamples?: VoiceSample[];
+  /** 汇总侧样本台账：模型返回 N 条、真正对上候选 M 条 */
+  voiceStats?: { candidates: number; hits: number };
   usage?: { promptTokens?: number; completionTokens?: number };
+}
+
+/**
+ * 汇总返回的样本只做"从候选里挑"的校验（A5 红线）：
+ * 汇总调用看不到原文，模型很容易把候选"顺手改顺"——改过的就不是原声了。
+ * 做法：与候选池按空白归一比对，命中就换回候选里那份原文；命不中直接丢。
+ * 顺带按 SAMPLES_LIMIT / SAMPLES_MAX_CHARS 收口（样本层的预算硬约束）。
+ */
+function verifySummarizedSamples(
+  raw: unknown,
+  candidates: VoiceSample[],
+): { samples: VoiceSample[]; dropped: number } {
+  const list = Array.isArray(raw) ? raw : [];
+  const byNorm = new Map(candidates.map((c) => [normalizeQuote(c.quote), c]));
+  const picked: VoiceSample[] = [];
+  const seen = new Set<string>();
+  let dropped = 0;
+  let chars = 0;
+  for (const item of list) {
+    const s = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+    const key = typeof s.quote === 'string' ? normalizeQuote(s.quote) : '';
+    const hit = key ? byNorm.get(key) : undefined;
+    if (!hit || seen.has(key)) {
+      dropped += 1;
+      continue;
+    }
+    const scene = typeof s.scene === 'string' && s.scene.trim() ? s.scene.trim().slice(0, 30) : hit.scene;
+    const next: VoiceSample = { ...hit, ...(scene ? { scene } : {}) };
+    const cost = next.quote.length + (next.userQuote?.length ?? 0) + (next.scene?.length ?? 0);
+    if (picked.length >= SAMPLES_LIMIT || chars + cost > SAMPLES_MAX_CHARS) {
+      dropped += 1;
+      continue;
+    }
+    seen.add(key);
+    picked.push(next);
+    chars += cost;
+  }
+  return { samples: picked, dropped };
 }
 
 /**
@@ -243,6 +361,9 @@ export function buildSummarizeMessages(blocks: DistillBlockResult[]): ChatMessag
     .map((b) => {
       const mem = b.memories.map((m) => `- ${m.at ? `${m.at.slice(0, 10)}：` : ''}${m.text}`).join('\n');
       const facts = [...b.factsUser.map((f) => `[对方] ${f}`), ...b.factsRelationship.map((f) => `[关系] ${f}`)].join('\n');
+      const samples = (b.voiceSamples ?? [])
+        .map((s) => `- ${s.scene ? `（${s.scene}）` : ''}${s.userQuote ? `他说"${s.userQuote}"，` : ''}她说"${s.quote}"`)
+        .join('\n');
       return `── 第 ${b.blockIndex + 1} 段（${periodLabel(b, minAt, maxAt)}）摘要 ──
 ${b.summary || '（无）'}
 
@@ -253,7 +374,10 @@ ${b.personaFragments.map((p) => `- ${p}`).join('\n') || '- （无）'}
 ${facts || '- （无）'}
 
 这一段的具体事件：
-${mem || '- （无）'}`;
+${mem || '- （无）'}
+
+这一段她说话的原话（候选样本）：
+${samples || '- （无）'}`;
     })
     .join('\n\n');
 
@@ -269,11 +393,12 @@ ${mem || '- （无）'}`;
 4. coreMemories：从所有原料里挑出 5 到 10 条最不能忘的事（每条不超过 ${CORE_MEMORY_CHARS} 字，带时间 at）。这是给人工确认页的候选，宁缺毋滥，没有足够分量的事就少挑。
 5. factsUser 与 factsRelationship：合并所有原料的事实，同一条只出现一次，各最多 ${FACTS_LIMIT} 条，每条不超过 ${FACTS_PROMPT_CHARS} 字。事实里不写「今天」「昨天」「最近」这类相对时间，需要时间就写具体日期；一次性的事和审核结论不算事实，写进 coreMemories。
 6. 称呼归一：同一个人的两种写法，若只是错字、简写、同音或只差一个字（「老D」和「老丁」、「团子」和「团仔」），那就是同一称呼，统一写成正确的那一个。判断不了正字时取出现次数多的。绝不写成「自称 A／B」的别名——那会把一时的口误固化成设定。一个人有几个真正不同的身份（名字、职务、昵称）时才算不同称呼。
+7. voiceSamples：从各段列出的"候选样本"里挑 ${SAMPLES_LIMIT} 条以内的原话，**quote 与 userQuote 必须从候选里原样照抄，一个字都不许改**（不许润色、不许改标点、不许拼接）。你的活只有三件：合并重复（同一句话只留一条）、按"最能看出她怎么说话"排序、保证三种场合都有（日常闲聊 / 拌嘴互损 / 正经讨论）。近期候选优先；信息型长回答不要。scene 用一个第三人称短语（不超过 30 字）说明场合。
 
 密码、密钥、账号、支付信息、精确住址不进任何字段。原料里没有的内容不写。
 
 输出严格 JSON，不要 Markdown：
-{"persona":"...","impression":"...","summary":"...","coreMemories":[{"text":"...","at":"YYYY-MM-DD 或 null"}],"factsUser":["..."],"factsRelationship":["..."]}`;
+{"persona":"...","impression":"...","summary":"...","coreMemories":[{"text":"...","at":"YYYY-MM-DD 或 null"}],"factsUser":["..."],"factsRelationship":["..."],"voiceSamples":[{"scene":"...","quote":"...","userQuote":"..."}]}`;
 
   return [
     { role: 'system', content: system },
@@ -312,6 +437,12 @@ export async function distillSummarize(
         .filter((x): x is DistillMemory => x !== null)
         .slice(0, CORE_CANDIDATES_LIMIT)
     : [];
+  const candidates = blocks.flatMap((b) => b.voiceSamples ?? []);
+  const voice = verifySummarizedSamples(o.voiceSamples, candidates);
+  const rawSampleCount = Array.isArray(o.voiceSamples) ? o.voiceSamples.length : 0;
+  if (rawSampleCount > 0 && voice.samples.length === 0) {
+    console.warn(`[distill] 汇总返回的 ${rawSampleCount} 条原声样本一条都没对上候选池（模型改写了原话）`);
+  }
   return {
     personaCard: typeof o.persona === 'string' ? o.persona.trim().slice(0, PERSONA_MAX_CHARS) : '',
     impression: typeof o.impression === 'string' ? o.impression.trim().slice(0, IMPRESSION_CHARS) : '',
@@ -319,6 +450,8 @@ export async function distillSummarize(
     coreCandidates,
     factsUser: strList(o.factsUser, FACTS_LIMIT),
     factsRelationship: strList(o.factsRelationship, FACTS_LIMIT),
+    voiceSamples: voice.samples,
+    voiceStats: { candidates: rawSampleCount, hits: voice.samples.length },
     usage: { promptTokens: result.promptTokens, completionTokens: result.completionTokens },
   };
 }
@@ -447,6 +580,15 @@ export async function runDistill(
 
   running.clear();
   runningSince = Date.now();
+  // 原声样本台账（A5）：逐块打 候选 N / 命中 M；M=0 单独 warn——
+  // 否则"模型全程润色"和"原料本来就没样本"在产物上长得一样（都是 0 条）
+  for (const r of results) {
+    if (!r.voiceStats) continue;
+    const { candidates, hits } = r.voiceStats;
+    if (hits === 0) {
+      console.warn(`[distill] 第 ${r.blockIndex + 1} 块原声样本 0/${candidates} 命中（候选全被丢弃）`);
+    }
+  }
   emit('summarize');
   const summarize = await distillSummarize(client, results);
   done = blocks.length;
@@ -468,6 +610,7 @@ export async function runDistill(
     facts,
     summary: summarize.summary,
     diary: [],
+    voiceSamples: summarize.voiceSamples ?? [],
   });
 
   return { pack, coreCandidates: summarize.coreCandidates, blockResults: results, summarize };
