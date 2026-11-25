@@ -333,3 +333,95 @@
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
 }
+
+/* ── 账本 tab（账本方案 §3）：从简，两行数字加一个列表 ── */
+
+.ledgerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.ledgerBalance {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ledgerTotalLabel {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.ledgerTotalMoney {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ledgerRefresh {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.ledgerRefresh:hover:not(:disabled) {
+  color: var(--dsw-alias-label-primary);
+  background: var(--cb-card-bg-hover);
+}
+
+.ledgerRefresh:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ledgerNote {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.ledgerList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--cb-card-border);
+}
+
+.ledgerRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.ledgerMeta {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ledgerAmount {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ledgerEmpty {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}

@@ -1,7 +1,7 @@
 /**
  * 全局右上角：右侧抽屉，顶栏两个 tab（账本方案 §二）。
  *   · 「她的角落」：被子对话里 → 角色卡、她的日记；不在被子会话里 → 说明 + 被子列表 + 回收站 + 备份/恢复；
- *   · 「账本」：花销仪表板（v1.0.1 后续填入，本版先占位）。
+ *   · 「账本」：余额（官方接口）+ 本地估算消耗 + 明细（LedgerPanel）；
  * 弹窗从抽屉里点开后抽屉自动收起，不留两层叠在一起的界面。
  */
 
@@ -24,6 +24,7 @@ import { exportBackup, restoreBackup } from '../../services/backup/backup.js'
 import { reportStorageError } from '../../services/chat/db.js'
 import { BlanketDetail } from './BlanketDetail.js'
 import { DiaryDialog } from './DiaryDialog.js'
+import { LedgerPanel } from './LedgerPanel.js'
 import styles from './BlanketSidePanel.module.css'
 
 export const BlanketSidePanel = () => {
@@ -123,7 +124,7 @@ export const BlanketSidePanel = () => {
               </button>
             </div>
             {tab === 'ledger' ? (
-              <p className={styles.panelEmpty}>{t('ledgerTabEmpty')}</p>
+              <LedgerPanel />
             ) : (
             <>
             {current ? (

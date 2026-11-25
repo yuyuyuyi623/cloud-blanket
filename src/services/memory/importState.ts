@@ -27,6 +27,7 @@ import { createBlanket } from './importStore.js'
 import { refreshBlankets } from './blanketStore.js'
 import { describeDistillError, describeScanError } from './describeImportError.js'
 import { recordError } from '../diagnostics/errorLog.js'
+import { recordDistillCost } from '../usage/ledger.js'
 import { translate } from '../../i18n/index.js'
 
 export type ImportStep = 'pick' | 'scanning' | 'select' | 'confirm' | 'running' | 'done'
@@ -287,6 +288,8 @@ export const startDistill = async (apiKey: string): Promise<void> => {
       parsedSessions: loaded.sessions,
       onProgress: (progress) => useBlanketImport.setState({ progress }),
     })
+    // 蒸馏记一笔账：金额用确认页那个预估实付（engine/estimate 口径），完成时刻判峰谷
+    void recordDistillCost(planFor(loaded.sessions, selected).estimate.costCny)
     // 侧栏"我的被子"立刻能看到新盖的这床
     void refreshBlankets()
     useBlanketImport.setState({

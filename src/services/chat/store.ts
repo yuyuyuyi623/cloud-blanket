@@ -14,6 +14,7 @@ import {
   useUploads,
 } from '../attachments.js'
 import { useSettings } from '../settings.js'
+import { recordMessageUsage } from '../usage/ledger.js'
 import { buildStableSegment } from '../../../engine/context.js'
 import {
   blanketOfSession,
@@ -1150,6 +1151,29 @@ const waitForRetry = (attempt: number, signal: AbortSignal) =>
  * 补传失败时回复记为 upload 错误，可重试。
  * 服务端判定 file_id 失效时重新补传后重发，退避重试且次数有上限，超过则按原始报错收尾。
  */
+/**
+ * 记一笔回复账（账本方案 §3.2）。usage 三向映射：
+ *   MessageUsage.cache_read_input_tokens → 命中输入；input_tokens（已扣命中）→ 未命中；output_tokens → 输出。
+ * 拿不到 usage（含全零）就如实不记，不编数据；recordMessageUsage 内部静默失败，绝不影响聊天。
+ */
+const recordReplyUsage = (
+  mode: 'normal' | 'blanket',
+  reply: AssistantMessage,
+  requestTs: number
+) => {
+  void recordMessageUsage(
+    mode,
+    reply.usage
+      ? {
+          hit: reply.usage.cache_read_input_tokens ?? 0,
+          miss: reply.usage.input_tokens,
+          completion: reply.usage.output_tokens,
+        }
+      : undefined,
+    requestTs
+  )
+}
+
 const streamReply = async (sessionId: string, initial: AssistantMessage, request: Request) => {
   const controller = new AbortController()
   if (!getSession(sessionId)?.title) {
@@ -1162,6 +1186,8 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   const blanketMemory = blanket ? await getBlanketMemory(blanket.id) : undefined
   let reply = initial
   let frame = 0
+  /** 本轮请求发出时刻，峰谷判据（账本方案 §3.2） */
+  let requestTs = Date.now()
   const flush = () => {
     cancelAnimationFrame(frame)
     frame = 0
@@ -1184,6 +1210,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         reply = { ...reply, latestReminder }
         updateReply(sessionId, reply)
         persist(sessionId)
+        requestTs = Date.now()
         const messages = toRequestMessages(
           prepared.history,
           prepared.question,
@@ -1234,10 +1261,12 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
           }
         }
         reply = settleReply(reply, 'done', Date.now())
+        recordReplyUsage(blanketMemory ? 'blanket' : 'normal', reply, requestTs)
         break
       } catch (error) {
         if (controller.signal.aborted) {
           reply = settleReply(reply, 'stopped', Date.now())
+          recordReplyUsage(blanketMemory ? 'blanket' : 'normal', reply, requestTs)
           break
         }
         if (preparing) {
@@ -1266,6 +1295,7 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
         if (error instanceof ApiError && error.kind === 'interrupted' && reply.stopReason) {
           // 已收到 message_delta 的结束原因，只是缺了结尾的 message_stop
           reply = settleReply(reply, 'done', Date.now())
+          recordReplyUsage(blanketMemory ? 'blanket' : 'normal', reply, requestTs)
         } else if (error instanceof ApiError) {
           recordError('对话', error)
           reply = settleReply(reply, 'error', Date.now(), {

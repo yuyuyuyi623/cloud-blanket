@@ -5,7 +5,7 @@ import type { BlanketRecord } from '../memory/blanket.js'
 import { toSessionSummary, type Session, type SessionSummary } from './types.js'
 
 /** IndexedDB 存储结构版本；新增或调整存储、索引时递增。 */
-const DB_VERSION = 13
+const DB_VERSION = 14
 
 /** 文件原件按附件的本地 id 存储，所有引用同一 id 的消息共用一份；用于缩略图、打开查看，以及没有 serverId 时补传。 */
 export type StoredFile = {
@@ -56,9 +56,26 @@ interface ChatDB extends DBSchema {
     value: BlanketSessionRecord
     indexes: { blanketId: string }
   }
+  /** 账本用量（v14 新增）：每条消息/每次蒸馏一笔，只存数字和时间，绝不存消息内容 */
+  usageLog: { key: string; value: UsageLogEntry; indexes: { ts: string } }
 }
 
 let dbPromise: Promise<IDBPDatabase<ChatDB>> | null = null
+
+/** 账本一笔：峰谷由 ts 判定后落库，cost 是折算后的人民币金额（估算口径） */
+export interface UsageLogEntry {
+  id: string
+  /** 请求发出时刻（蒸馏 = 完成时刻），UTC 毫秒 */
+  ts: number
+  /** 普通对话 / 被子对话 / 蒸馏 */
+  mode: 'normal' | 'blanket' | 'distill'
+  hit: number
+  miss: number
+  completion: number
+  peak: boolean
+  /** 人民币金额（峰谷折算后的估算值） */
+  cost: number
+}
 
 const storedSummary = (session: Session): StoredSessionSummary => ({
   ...toSessionSummary(session),
@@ -107,6 +124,9 @@ const getDB = () =>
           'blanketId',
           'blanketId'
         )
+      }
+      if (!db.objectStoreNames.contains('usageLog')) {
+        db.createObjectStore('usageLog', { keyPath: 'id' }).createIndex('ts', 'ts')
       }
     },
   }).catch((error: unknown) => {
@@ -490,3 +510,45 @@ export const restoreFromBackup = guarded(async (payload: RestorePayload): Promis
   }
   await tx.done
 })
+
+// ── 账本用量（账本方案 §3.3，2026-11-25）────────────────────
+// 只存数字和时间，绝不存消息内容；纯本地，无任何上传。
+// 小写入不走过 guarded 闸（账本丢了不该弹"存储已满"打断聊天，失败静默）。
+
+let usageSeq = 0
+
+/** 记一笔用量。失败静默：账本是锦上添花，不能让它打断聊天或蒸馏。 */
+export const addUsageLog = async (entry: Omit<UsageLogEntry, 'id'>): Promise<void> => {
+  try {
+    const db = await getDB()
+    usageSeq = (usageSeq + 1) % Number.MAX_SAFE_INTEGER
+    await db.put('usageLog', { ...entry, id: `${entry.ts.toString(36)}-${usageSeq.toString(36)}` })
+  } catch (error) {
+    reportStorageError('usage log')(error)
+  }
+}
+
+/** 倒序取最近 limit 条（账本明细只读，不做删除/编辑） */
+export const loadUsageLog = async (limit: number): Promise<UsageLogEntry[]> => {
+  const db = await getDB()
+  const out: UsageLogEntry[] = []
+  for await (const cursor of db.transaction('usageLog').store.index('ts').iterate(undefined, 'prev')) {
+    out.push(cursor.value)
+    if (out.length >= limit) {
+      break
+    }
+  }
+  return out
+}
+
+/** 全量累计（明细上千条也是小记录，一次读齐算总计最简单，不单独维护汇总行） */
+export const loadUsageTotal = async (): Promise<{ total: number; count: number }> => {
+  const db = await getDB()
+  let total = 0
+  let count = 0
+  for await (const cursor of db.transaction('usageLog').store) {
+    total += cursor.value.cost
+    count += 1
+  }
+  return { total, count }
+}
