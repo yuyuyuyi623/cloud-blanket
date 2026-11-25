@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { estimateCost, isPeakHours } from '../src/services/usage/ledger.js'
 
 /** 北京墙上时间 → Date。输入 (2026, 11月, 25日, 时, 分) 语义直观，内部转 UTC 毫秒 */
@@ -45,5 +45,70 @@ describe('峰谷折算（每百万 token 价，峰 ×2）', () => {
     // 8 万命中输入 + 1 千输出，谷价：0.08*0.02 + 0.001*4 = 0.0016 + 0.004
     const cost = estimateCost({ hit: 80_000, miss: 0, completion: 1_000 }, false)
     expect(cost).toBeCloseTo(0.0016 + 0.004, 10)
+  })
+})
+
+describe('保守方向纪律（2026-11-25 拍板：宁可稍微贵点，也别让用户以为我们抽成）', () => {
+  /** 读回账本里最近一笔（recordMessageUsage 内部落库，用内存 stub 验证写入值） */
+  const captureLastWrite = async (): Promise<{
+    rec: typeof import('../src/services/usage/ledger.js').recordMessageUsage
+    writes: Record<string, unknown>[]
+  }> => {
+    const writes: Record<string, unknown>[] = []
+    vi.doMock('../src/services/chat/db.js', () => ({
+      addUsageLog: async (entry: Record<string, unknown>) => {
+        writes.push(entry)
+      },
+      loadUsageLog: async () => [],
+      loadUsageTotal: async () => ({ total: 0, count: 0 }),
+    }))
+    vi.resetModules()
+    const { recordMessageUsage: rec } = await import('../src/services/usage/ledger.js')
+    return { rec, writes }
+  }
+
+  it('中断无 usage：按已生成文字 1 字 = 1 token 保守记输出，金额 = 字数 × 输出价', async () => {
+    const { rec, writes } = await captureLastWrite()
+    // 周六谷价，100 字正文，无 usage
+    await rec('normal', undefined, beijing(2026, 11, 28, 10).getTime(), undefined, 'a'.repeat(100))
+    expect(writes).toHaveLength(1)
+    const entry = writes[0] as { hit: number; miss: number; completion: number; cost: number }
+    expect(entry.completion).toBe(100)
+    expect(entry.hit).toBe(0)
+    expect(entry.miss).toBe(0)
+    expect(entry.cost).toBeCloseTo((100 / 1_000_000) * 4, 12)
+  })
+
+  it('中断无 usage 且无正文：不记（官方对完全失败请求不收费，记了是虚高误导）', async () => {
+    const { rec, writes } = await captureLastWrite()
+    await rec('normal', undefined, Date.now(), undefined, '')
+    expect(writes).toHaveLength(0)
+  })
+
+  it('峰谷任一落峰即记峰：13:55 发（谷）→ 14:05 完成（峰），整笔记峰', async () => {
+    const { rec, writes } = await captureLastWrite()
+    // 13:55 发（谷）→ 14:05 完成（峰）：跨进峰，整笔记峰
+    await rec(
+      'normal',
+      { hit: 0, miss: 1_000_000, completion: 0 },
+      beijing(2026, 11, 25, 13, 55).getTime(),
+      beijing(2026, 11, 25, 14, 5).getTime()
+    )
+    expect(writes).toHaveLength(1)
+    expect((writes[0] as { peak: boolean }).peak).toBe(true)
+    expect((writes[0] as { cost: number }).cost).toBeCloseTo(2, 10) // 未命中价 ×2
+  })
+
+  it('两刻都在谷：仍记谷（保守化不改变正常情形）', async () => {
+    const { rec, writes } = await captureLastWrite()
+    await rec(
+      'blanket',
+      { hit: 0, miss: 1_000_000, completion: 0 },
+      beijing(2026, 11, 25, 12, 30).getTime(),
+      beijing(2026, 11, 25, 12, 59).getTime()
+    )
+    expect(writes).toHaveLength(1)
+    expect((writes[0] as { peak: boolean }).peak).toBe(false)
+    expect((writes[0] as { cost: number }).cost).toBeCloseTo(1, 10)
   })
 })

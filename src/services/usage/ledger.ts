@@ -58,25 +58,39 @@ export const estimateCost = (
 }
 
 // ── 记账（三链路共用）────────────────────────────────────────
+// 保守方向纪律（2026-11-25 羽翼拍板：宁可稍微贵点，也别骗消费者）：
+//   - 峰谷取"发送时刻与完成时刻任一落在峰即整笔记峰"；
+//   - 中断没拿到 usage 的请求，按已生成文字 1 字 = 1 token 保守记输出（刻意高估 token 数）；
+//   - 展示层金额一律向上取整。完全失败、没生成内容的请求仍不记（官方不收费，记了是虚高误导）。
 
 /** 普通模式 / 被子模式的一条回复记一笔。失败静默，不影响聊天。 */
 export const recordMessageUsage = async (
   mode: UsageLogEntry['mode'],
   usage: { hit: number; miss: number; completion: number } | undefined,
-  requestTs: number
+  requestTs: number,
+  /** 完成/中断时刻，峰谷判据之一（默认 = requestTs） */
+  doneTs: number = requestTs,
+  /** usage 缺失时兜底：已生成的正文文本，按 1 字 1 token 记输出 */
+  fallbackText?: string
 ): Promise<void> => {
-  if (!usage || (!usage.hit && !usage.miss && !usage.completion)) {
-    return // 该请求没拿到 usage（如上传失败重试前的中断），如实不计，不编数据
+  let final = usage
+  if (!final || (!final.hit && !final.miss && !final.completion)) {
+    if (fallbackText && fallbackText.length > 0) {
+      // 中断且服务端没回 usage：DeepSeek 对已生成部分照常收费，这里保守估算，宁可多记
+      final = { hit: 0, miss: 0, completion: fallbackText.length }
+    } else {
+      return // 完全没产出（请求没发出/失败前无内容），官方不收费，不记
+    }
   }
-  const peak = isPeakHours(new Date(requestTs))
+  const peak = isPeakHours(new Date(requestTs)) || isPeakHours(new Date(doneTs))
   await addUsageLog({
     ts: requestTs,
     mode,
-    hit: usage.hit,
-    miss: usage.miss,
-    completion: usage.completion,
+    hit: final.hit,
+    miss: final.miss,
+    completion: final.completion,
     peak,
-    cost: estimateCost(usage, peak),
+    cost: estimateCost(final, peak),
   })
 }
 

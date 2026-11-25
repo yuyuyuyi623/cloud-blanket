@@ -44,6 +44,7 @@ import {
   type AssistantMessage,
   type FileAttachment,
   type Message,
+  type ReplyBlock,
   type Session,
   type SessionSummary,
   type UserMessage,
@@ -1161,6 +1162,12 @@ const recordReplyUsage = (
   reply: AssistantMessage,
   requestTs: number
 ) => {
+  // 兜底文本 = 全部正文块字数（不含思考块）：usage 缺失时按 1 字 1 token 保守记输出，
+  // 宁可贵点也不能让账本低于真账单（用户会以为我们抽成，2026-11-25 拍板）
+  const fallbackText = reply.blocks
+    .filter((block): block is Extract<ReplyBlock, { type: 'text' }> => block.type === 'text')
+    .map((block) => block.text)
+    .join('')
   void recordMessageUsage(
     mode,
     reply.usage
@@ -1170,7 +1177,9 @@ const recordReplyUsage = (
           completion: reply.usage.output_tokens,
         }
       : undefined,
-    requestTs
+    requestTs,
+    Date.now(),
+    fallbackText
   )
 }
 

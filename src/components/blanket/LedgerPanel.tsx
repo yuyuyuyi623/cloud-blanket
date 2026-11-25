@@ -63,6 +63,11 @@ export const LedgerPanel = () => {
   const modeLabel = (mode: UsageLogEntry['mode']): string =>
     t(mode === 'normal' ? 'ledgerModeNormal' : mode === 'blanket' ? 'ledgerModeBlanket' : 'ledgerModeDistill')
 
+  /** 展示向上取整到分：宁可贵点也不能让用户看到的数字低于真账单（2026-11-25 拍板） */
+  const ceilFen = (cost: number): string => `¥${(Math.ceil(cost * 100) / 100).toFixed(2)}`
+  /** 单笔向上取整到万分之一元：明细加总只会 ≥ 真实累计 */
+  const ceilCost = (cost: number): string => `¥${(Math.ceil(cost * 10000) / 10000).toFixed(4)}`
+
   return (
     <div className={styles.ledgerBlock}>
       {/* 余额：真数据 */}
@@ -88,7 +93,7 @@ export const LedgerPanel = () => {
       <div className={styles.ledgerBalance}>
         <span className={styles.ledgerTotalLabel}>{t('ledgerTotal')}</span>
         <span className={styles.ledgerTotalMoney}>
-          {ledger ? `¥${ledger.total.toFixed(2)}` : '…'}
+          {ledger ? ceilFen(ledger.total) : '…'}
         </span>
       </div>
       <p className={styles.ledgerNote}>{t('ledgerNote')}</p>
@@ -102,7 +107,7 @@ export const LedgerPanel = () => {
                 {entryTime(entry.ts)} · {modeLabel(entry.mode)} ·{' '}
                 {entry.peak ? t('ledgerPeak') : t('ledgerOffPeak')}
               </span>
-              <span className={styles.ledgerAmount}>¥{entry.cost.toFixed(4)}</span>
+              <span className={styles.ledgerAmount}>{ceilCost(entry.cost)}</span>
             </div>
           ))}
         </div>
