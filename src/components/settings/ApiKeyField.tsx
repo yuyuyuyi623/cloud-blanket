@@ -78,6 +78,8 @@ export const ApiKeyField = ({ editor }: { editor: ApiKeyEditor }) => {
           </div>
         )}
         {showInput && form.error ? <div className={styles.error}>{form.error}</div> : null}
+        {/* 首次告知（经济方案 §3.2）：唯一的主动露出——按用量计费说一句，账单位置指个路 */}
+        <div className={styles.description}>{t('apiKeyBillingNote')}</div>
       </div>
     </div>
   )

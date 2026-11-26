@@ -1,10 +1,10 @@
 import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo } from 'react'
-import { IconRefreshOutline16, IconWarningOutline16 } from '../base/icons.js'
+import { IconRefreshOutline16, IconSearchOutline16, IconWarningOutline16 } from '../base/icons.js'
 import { describeReply } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
-import { continueReply, regenerateReply } from '../../services/chat/store.js'
+import { continueReply, deepDiveReply, regenerateReply } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openSettings } from '../settings/settingsDialogState.js'
@@ -156,6 +156,20 @@ export const AssistantMessage = memo(function AssistantMessage({
                 regenerateReply(sessionId, message.id)
               }}
             />
+            {/* 再深入查一下（经济方案 §三）：仅自动档（未开思考）且本轮真搜过才出现——
+                90% 的问题 0.8 分够用，要核对的用户自己点，一次约 2~3 分，成本明明白白 */}
+            {!message.thinking && view.searchResults.length > 0 ? (
+              <IconButton
+                icon={<IconSearchOutline16 />}
+                tooltip={t('deepDive')}
+                tooltipPlacement="bottom"
+                disabled={busy || refused}
+                onClick={() => {
+                  stopReadAloud()
+                  deepDiveReply(sessionId, message.id)
+                }}
+              />
+            ) : null}
           </div>
           {isLast && canContinueReply(message) ? (
             <Button

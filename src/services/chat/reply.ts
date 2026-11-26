@@ -169,6 +169,37 @@ export const settleReply = (
   }),
 })
 
+/**
+ * 落档裁剪（2026-11-26 经济方案）：回复落档时把服务端工具快照里的死重丢掉。
+ * - sources 丢 snippet / site_icon / image_url（官方文档：这些展示字段回传时会被忽略，丢弃合法），
+ *   留 url + title + 域名 + 日期——旧搜索快照的时效只有当轮，摘要留着只占上下文；
+ * - 每步 reasoning_content 清空：历史思考不参与后续回答（toAssistantParam 也不回传）；
+ * - signature 保留：read_link 靠它把网页正文拼回上下文，这是唯一不能丢的加密载荷。
+ * 幂等：裁过的快照再裁一遍结果不变。必须在「落档时」调用、不能在「请求时按年龄裁」——
+ * 后者会让同一份历史每轮回放内容不同，前缀每轮断一次，缓存全废。
+ */
+export const trimServerToolCalls = (calls: ServerToolCallStep[]): ServerToolCallStep[] =>
+  calls.map((step) => ({
+    index: step.index,
+    reasoning_content: '',
+    calls: step.calls.map((call) => ({
+      ...call,
+      ...(call.sources
+        ? {
+            sources: call.sources.map((source) => ({
+              type: 'url' as const,
+              url: source.url,
+              title: source.title,
+              snippet: '',
+              site_name: source.site_name,
+              site_icon: null,
+              published_at: source.published_at,
+            })),
+          }
+        : {}),
+    })),
+  }))
+
 /** 回复里所有文本块拼起来，用于复制与判断是否有回答 */
 export const getReplyText = (reply: AssistantMessage) =>
   reply.blocks.map((block) => (block.type === 'text' ? block.text : '')).join('')

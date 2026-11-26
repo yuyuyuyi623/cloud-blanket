@@ -21,6 +21,8 @@ type Settings = {
   thinking: boolean
   search: boolean
   siderCollapsed: boolean
+  /** 月度提醒线（元）：只提醒不拦截，超线不弹窗（2026-11-26 经济方案 §3.2） */
+  monthlyReminderLine: number
 }
 
 const KEYS = {
@@ -33,6 +35,7 @@ const KEYS = {
   thinking: 'chat-demo:thinking',
   search: 'chat-demo:search',
   siderCollapsed: 'chat-demo:sider-collapsed',
+  monthlyReminderLine: 'chat-demo:monthly-reminder-line',
 } as const
 
 /** 备份/恢复要读写全部设置键；从这里出，避免备份侧自己抄一份清单后两处漂移。 */
@@ -101,6 +104,17 @@ const initialBlanketStyle = (): BlanketStyle => (read(KEYS.blanketStyle) === 'pl
 /** 未保存过时使用服务端默认音色 stella（海星） */
 const initialTtsVoice = (): TtsVoice => (read(KEYS.ttsVoice) === 'tide' ? 'tide' : 'stella')
 
+/** 月度提醒线默认 ¥20（2026-11-26 拍板上调：不拦截的线设高点没有代价，且避免重度日误撞线）；可改 1~100 */
+export const MONTHLY_REMINDER_LINE_DEFAULT = 20
+const clampReminderLine = (value: number): number =>
+  Number.isFinite(value) ? Math.min(100, Math.max(1, Math.round(value))) : MONTHLY_REMINDER_LINE_DEFAULT
+const initialMonthlyReminderLine = (): number => {
+  const saved = Number(read(KEYS.monthlyReminderLine))
+  return Number.isFinite(saved) && saved >= 1 && saved <= 100
+    ? Math.round(saved)
+    : MONTHLY_REMINDER_LINE_DEFAULT
+}
+
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
   locale: initialLocale(),
@@ -111,6 +125,7 @@ export const useSettings = create<Settings>(() => ({
   thinking: read(KEYS.thinking) === 'true',
   search: read(KEYS.search) === 'true',
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
+  monthlyReminderLine: initialMonthlyReminderLine(),
 }))
 
 export const setLocale = (locale: Locale) => {
@@ -157,4 +172,35 @@ export const setSearch = (search: boolean) => {
 export const setSiderCollapsed = (siderCollapsed: boolean) => {
   write(KEYS.siderCollapsed, String(siderCollapsed))
   useSettings.setState({ siderCollapsed })
+}
+
+export const setMonthlyReminderLine = (line: number) => {
+  const value = clampReminderLine(line)
+  write(KEYS.monthlyReminderLine, String(value))
+  useSettings.setState({ monthlyReminderLine: value })
+}
+
+// ── 搜索深度三态（2026-11-26 经济方案 §3.3）────────────────────
+// searchMode 是 thinking/search 两个既有字段的**派生视图**，不是第三套真值：
+//   自动 = thinking 关 + 搜索声明保留（官方：关思考时由模型自己判断搜不搜，一轮最多一次搜索）
+//   深度 = thinking 开 + 搜索声明保留（深度搜索，边想边搜、最多约 20 步工具调用）
+//   关   = 不声明搜索（答案只靠已知，thinking 随用户）
+// 输入区手动改 thinking/search → 派生档位自动跟随，不存在“档位与开关不一致”的状态，
+// 也就不需要“本次已手动调整”的提示逻辑（方案原文的提示条因派生设计而不需要）。
+
+export type SearchMode = 'auto' | 'deep' | 'off'
+
+export const getSearchMode = (thinking: boolean, search: boolean): SearchMode =>
+  !search ? 'off' : thinking ? 'deep' : 'auto'
+
+export const setSearchMode = (mode: SearchMode) => {
+  if (mode === 'auto') {
+    setThinking(false)
+    setSearch(true)
+  } else if (mode === 'deep') {
+    setThinking(true)
+    setSearch(true)
+  } else {
+    setSearch(false)
+  }
 }

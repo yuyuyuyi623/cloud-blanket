@@ -1,8 +1,8 @@
 /**
- * 全局右上角：右侧抽屉，顶栏两个 tab（账本方案 §二）。
+ * 全局右上角：右侧抽屉，顶栏「她的角落 / 设置」（2026-11-26 经济方案 §3.2 拍板：价签退到后台，
+ * 账本 tab 撤掉，用量与账单下沉到「设置」里）。原「账本」tab 位置放「设置」入口。
  *   · 「她的角落」：被子对话里 → 角色卡、她的日记；不在被子会话里 → 说明 + 被子列表 + 回收站 + 备份/恢复；
- *   · 「账本」：余额（官方接口）+ 本地估算消耗 + 明细（LedgerPanel）；
- * 弹窗从抽屉里点开后抽屉自动收起，不留两层叠在一起的界面。
+ *   · 「设置」：打开设置弹窗（抽屉自动收起，不留两层界面）。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -25,14 +25,12 @@ import { reportStorageError } from '../../services/chat/db.js'
 import { BlanketDetail } from './BlanketDetail.js'
 import { ConsolidationPanel } from './ConsolidationPanel.js'
 import { DiaryDialog } from './DiaryDialog.js'
-import { LedgerPanel } from './LedgerPanel.js'
+import { openSettings } from '../settings/settingsDialogState.js'
 import styles from './BlanketSidePanel.module.css'
 
 export const BlanketSidePanel = () => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
-  /** 抽屉顶栏 tab（账本方案 §二）：默认她的角落 */
-  const [tab, setTab] = useState<'corner' | 'ledger'>('corner')
   /** 备份导出中 / 恢复两步确认的待恢复文件 */
   const [backupBusy, setBackupBusy] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<File | null>(null)
@@ -109,25 +107,23 @@ export const BlanketSidePanel = () => {
             <div className={styles.tabs}>
               <button
                 type="button"
-                className={tab === 'corner' ? styles.tabActive : styles.tab}
-                aria-pressed={tab === 'corner'}
-                onClick={() => setTab('corner')}
+                className={styles.tabActive}
+                aria-pressed="true"
               >
                 {t('cornerTab')}
               </button>
+              {/* 原「账本」tab 的位置：设置入口（用量与账单在设置里，价签退到后台） */}
               <button
                 type="button"
-                className={tab === 'ledger' ? styles.tabActive : styles.tab}
-                aria-pressed={tab === 'ledger'}
-                onClick={() => setTab('ledger')}
+                className={styles.tab}
+                onClick={() => {
+                  setOpen(false)
+                  openSettings('general')
+                }}
               >
-                {t('ledgerTab')}
+                {t('settings')}
               </button>
             </div>
-            {tab === 'ledger' ? (
-              <LedgerPanel />
-            ) : (
-            <>
             {current ? (
               <>
                 <div className={styles.panelBlanket}>{current.name}</div>
@@ -309,8 +305,6 @@ export const BlanketSidePanel = () => {
                 ))}
               </div>
             </div>
-            </>
-            )}
           </aside>
         </>
       ) : null}

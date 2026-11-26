@@ -426,6 +426,99 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* ── 用量与账单页（经济方案 2026-11-26 §3.2）：百分比双层刻度、异常归因、提醒线 ── */
+
+.ledgerProgressRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 2px;
+}
+
+.ledgerProgress {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--cb-card-border);
+  overflow: hidden;
+}
+
+.ledgerProgressFill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--dsw-alias-label-secondary);
+  transition: width 0.3s;
+}
+
+/* 超提醒线：只变色不拦截（提醒线不是拦截线） */
+.ledgerProgressOver .ledgerProgressFill {
+  background: var(--dsw-alias-status-danger);
+}
+
+.ledgerPercent {
+  min-width: 44px;
+  text-align: right;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ledgerMoneySmall {
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ledgerOverLine {
+  margin: 0 0 6px;
+  font-size: 11px;
+  color: var(--dsw-alias-status-danger);
+}
+
+/* 异常日归因：只陈述事实，不给建议 */
+.ledgerAttribution {
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--cb-card-bg-hover);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.ledgerLineInput {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid var(--cb-card-border);
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 搜索深度三态：复用 styleOption 选块骨架，排一行 */
+.ledgerModeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.ledgerModeLabel {
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.ledgerSectionTitle {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
 /* ── 记忆巩固区块（记忆巩固方案 §四）：跟备份区同款骨架 ── */
 
 .consolidRow {

@@ -75,6 +75,13 @@ export interface UsageLogEntry {
   peak: boolean
   /** 人民币金额（峰谷折算后的估算值） */
   cost: number
+  /**
+   * 本轮联网调用次数（usage.server_tool_use 的 search+fetch+image_search，2026-11-26 经济方案 §3.4）。
+   * 可选字段、不改索引，无需升库版本；旧记录无此字段按 0 处理，不追溯。
+   */
+  searches?: number
+  /** 本轮是否开启思考；旧记录无此字段按 false 处理 */
+  thinking?: boolean
 }
 
 const storedSummary = (session: Session): StoredSessionSummary => ({
@@ -551,4 +558,19 @@ export const loadUsageTotal = async (): Promise<{ total: number; count: number }
     count += 1
   }
   return { total, count }
+}
+
+/**
+ * 取某时刻之后的全部记录（正序）。「用量与账单」页用：本月进度 + 今天 + 近 7 天日均 + 归因，
+ * 一次读齐。用量页是低频二级页，全读成本可忽略。
+ */
+export const loadUsageSince = async (sinceTs: number): Promise<UsageLogEntry[]> => {
+  const db = await getDB()
+  const out: UsageLogEntry[] = []
+  for await (const cursor of db.transaction('usageLog').store.index('ts').iterate(
+    IDBKeyRange.lowerBound(sinceTs)
+  )) {
+    out.push(cursor.value)
+  }
+  return out
 }

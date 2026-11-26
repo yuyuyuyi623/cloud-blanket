@@ -41,6 +41,7 @@ import {
   getReplyText,
   settleReply,
   toRequestMessages,
+  trimServerToolCalls,
 } from './reply.js'
 import {
   toSessionSummary,
@@ -821,6 +822,35 @@ export const regenerateReply = (sessionId: string, messageId?: string) => {
   void streamReply(sessionId, reply, { history, question })
 }
 
+/**
+ * 再深入查一下（2026-11-26 经济方案 §三）：同一个问题挂一个「深度思考 + 联网」的版本。
+ * 自动档先按最省的方式答，用户看完觉得需要核对再点——升级路径从事前设置变成事后一键。
+ * 不覆盖原回答（走 appendBranch 分支），成本明明白白：一次约 2~3 分。
+ */
+export const deepDiveReply = (sessionId: string, messageId: string) => {
+  if (get().importingHistory || deletingSessions.has(sessionId)) {
+    return
+  }
+  const session = getSession(sessionId)
+  if (!session || getStreamController(sessionId)) {
+    return
+  }
+  const path = getVisibleMessages(session)
+  const index = path.findIndex((m) => m.id === messageId)
+  const question = path[index - 1]
+  if (question?.role !== 'user' || path[index]?.role !== 'assistant') {
+    return
+  }
+  const history = path.slice(0, index - 1)
+  const reply = { ...createReply(), thinking: true, search: true }
+  updateSession(sessionId, (s) => ({
+    ...appendBranch(s, question.id, [reply]),
+    updatedAt: Date.now(),
+  }))
+  persist(sessionId)
+  void streamReply(sessionId, reply, { history, question })
+}
+
 /** 编辑提问后新增同父版本，保留原文件；旧问题的所有回答与后续对话仍可切回。 */
 export const editMessage = (sessionId: string, messageId: string, content: string): boolean => {
   if (get().importingHistory || deletingSessions.has(sessionId)) {
@@ -1182,7 +1212,12 @@ const recordReplyUsage = (
       : undefined,
     requestTs,
     Date.now(),
-    fallbackText
+    fallbackText,
+    // 归因字段（2026-11-26 经济方案 §3.4）：官方响应自带 server_tool_use，零成本落库
+    {
+      searches: reply.usage?.server_tool_use?.web_search_requests ?? 0,
+      thinking: reply.thinking === true,
+    }
   )
 }
 
@@ -1356,6 +1391,11 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
     titleRequests.delete(controller)
     streamFlushes.delete(sessionId)
     cancelAnimationFrame(frame)
+    // 落档裁剪（2026-11-26 经济方案）：所有结束路径共用这一个落档口，
+    // 快照瘦身只发生在收尾这一次——流式中的 flush 不裁，请求回放的自然是瘦身版
+    if (reply.serverToolCalls?.length) {
+      reply = { ...reply, serverToolCalls: trimServerToolCalls(reply.serverToolCalls) }
+    }
     updateReply(sessionId, reply)
     set((state) => ({
       streaming: Object.fromEntries(
