@@ -18,7 +18,16 @@ import {
   isAnomalyDay,
   attributeDay,
 } from '../src/services/usage/ledger.js';
-import { getSearchMode, setSearchMode, useSettings, MONTHLY_REMINDER_LINE_DEFAULT } from '../src/services/settings.js';
+import {
+  useSettings,
+  MONTHLY_REMINDER_LINE_DEFAULT,
+  setThinkingEffort,
+  setShowThinkingNormal,
+  setShowThinkingBlanket,
+  normalReplyParams,
+  gearReplyParams,
+} from '../src/services/settings.js';
+import { isDoubtQuestion } from '../src/services/chat/describe.js';
 import type { UsageLogEntry } from '../src/services/chat/db.js';
 
 const entry = (overrides: Partial<UsageLogEntry>): UsageLogEntry => ({
@@ -171,30 +180,56 @@ describe('attributeDay（聊多了 vs 单条贵了，拆开）', () => {
   });
 });
 
-describe('searchMode 三态（派生视图，不是第三套真值）', () => {
-  it('默认档是自动', () => {
+describe('思考强度档位（档位重做方案 2026-11-27）', () => {
+  it('提醒线默认仍是 20', () => {
     expect(MONTHLY_REMINDER_LINE_DEFAULT).toBe(20);
   });
 
-  it('thinking/search 组合 → 档位映射', () => {
-    expect(getSearchMode(false, true)).toBe('auto');
-    expect(getSearchMode(true, true)).toBe('deep');
-    expect(getSearchMode(false, false)).toBe('off');
-    expect(getSearchMode(true, false)).toBe('off'); // 搜索关了就是 off，thinking 无关
+  it('默认档是经济（low）；显示开关普通默认开、被子默认关', () => {
+    expect(useSettings.getState().thinkingEffort).toBe('low');
+    expect(useSettings.getState().showThinkingNormal).toBe(true);
+    expect(useSettings.getState().showThinkingBlanket).toBe(false);
   });
 
-  it('setSearchMode 写回两个既有字段；关搜索不动 thinking', () => {
-    useSettings.setState({ thinking: false, search: false });
-    setSearchMode('auto');
-    expect(useSettings.getState().thinking).toBe(false);
-    expect(useSettings.getState().search).toBe(true);
-    setSearchMode('deep');
-    expect(useSettings.getState().thinking).toBe(true);
-    expect(useSettings.getState().search).toBe(true);
-    useSettings.setState({ thinking: true });
-    setSearchMode('off');
-    // 关搜索：thinking 随用户，不动
-    expect(useSettings.getState().thinking).toBe(true);
-    expect(useSettings.getState().search).toBe(false);
+  it('setThinkingEffort 与显示开关写回设置', () => {
+    setThinkingEffort('max');
+    expect(useSettings.getState().thinkingEffort).toBe('max');
+    setThinkingEffort('off');
+    expect(useSettings.getState().thinkingEffort).toBe('off');
+    setThinkingEffort('low');
+    setShowThinkingNormal(false);
+    setShowThinkingBlanket(true);
+    expect(useSettings.getState().showThinkingNormal).toBe(false);
+    expect(useSettings.getState().showThinkingBlanket).toBe(true);
+    setShowThinkingNormal(true);
+    setShowThinkingBlanket(false);
+  });
+
+  it('普通模式参数：联网恒开，档位只决定思考强度', () => {
+    expect(normalReplyParams('off')).toEqual({ thinking: false, search: true });
+    expect(normalReplyParams('low')).toEqual({ thinking: true, effort: 'low', search: true });
+    expect(normalReplyParams('max')).toEqual({ thinking: true, effort: 'max', search: true });
+  });
+
+  it('被子四档 → 全矩阵穷尽：角色扮演全关、深思 high 不联网、经济联网不思考、专家全开', () => {
+    expect(gearReplyParams('roleplay')).toEqual({ thinking: false, search: false });
+    expect(gearReplyParams('deep')).toEqual({ thinking: true, effort: 'high', search: false });
+    expect(gearReplyParams('eco')).toEqual({ thinking: false, search: true });
+    expect(gearReplyParams('expert')).toEqual({ thinking: true, effort: 'max', search: true });
+  });
+});
+
+describe('深挖按钮显示条件（§五）：追问质疑短语', () => {
+  it('固定质疑短语命中', () => {
+    expect(isDoubtQuestion('这个确定吗？')).toBe(true);
+    expect(isDoubtQuestion('不对吧，我查的不是这样')).toBe(true);
+    expect(isDoubtQuestion('再查查')).toBe(true);
+    expect(isDoubtQuestion('Are you sure?')).toBe(true);
+  });
+
+  it('普通追问不误触发', () => {
+    expect(isDoubtQuestion('那后来呢？')).toBe(false);
+    expect(isDoubtQuestion('谢谢，讲得很好')).toBe(false);
+    expect(isDoubtQuestion('')).toBe(false);
   });
 });

@@ -50,29 +50,37 @@ const useTicker = (active: boolean, interval: number) => {
 
 /**
  * 思考与工具步骤的时间线：
- * 开启深度思考时带可折叠的标题（正在思考 / 正在搜索 / 正在浏览网页 / 已思考（用时 N 秒））；
+ * 开启深度思考时带可折叠的标题（正在思考 / 正在搜索 / 正在浏览网页 / 已思考（用时 N 秒）），
+ * 默认折叠——动态灰条就是加载动画（档位重做方案 2026-11-27：人怕的不是慢，是沉默）；
  * 未开启时只有工具步骤（如普通搜索的「已阅读 N 个网页」）。
+ * showThinking=false（显示思考过程开关关）时思考链完全不渲染，工具行照常显示。
  */
 export const ReplyArea = memo(function ReplyArea({
   message,
   view,
   streaming,
   hasResponse,
+  showThinking = true,
 }: {
   message: AssistantMessage
   view: ReplyView
   streaming: boolean
   hasResponse: boolean
+  /** 显示思考过程开关（普通默认开、被子默认关）；关=不渲染思考块，生成照旧、账单不变 */
+  showThinking?: boolean
 }) {
   useTranslate()
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const titleActive = streaming && !hasResponse
   useTicker(titleActive, 1000)
-  if (view.steps.length === 0 && !(message.thinking && streaming)) {
+  const steps = showThinking ? view.steps : view.steps.filter((step) => step.type !== 'thinking')
+  if (steps.length === 0 && !(message.thinking && streaming && showThinking)) {
     return null
   }
   // 未记录请求开关时，按是否有思考内容显示标题。
-  const thinking = message.thinking ?? view.steps.some((step) => step.type === 'thinking')
+  const thinking = showThinking
+    ? (message.thinking ?? steps.some((step) => step.type === 'thinking'))
+    : false
   const title = thinking ? getAreaTitle(view, streaming, Date.now(), hasResponse) : null
   const stopped = !streaming && !hasResponse
   return (
@@ -88,7 +96,7 @@ export const ReplyArea = memo(function ReplyArea({
       ) : null}
       {open || !title ? (
         <div className={styles.steps}>
-          {view.steps.map((step, index) => (
+          {steps.map((step, index) => (
             <StepItem
               key={stepKey(step, index)}
               step={step}

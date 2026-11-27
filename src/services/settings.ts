@@ -10,7 +10,43 @@ export type ThemePreference = 'light' | 'dark' | 'system'
 /** 界面风格：云朵暖色（默认，米黄卡片）/ 官方原样（全中性色） */
 export type BlanketStyle = 'warm' | 'plain'
 
-/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、深度思考与智能搜索开关、侧边栏收起状态 */
+/** 思考强度（普通模式档位）：off=普通（秒出）/ low=经济（默认，短思考链）/ max=专家（档位重做方案 2026-11-27） */
+export type ThinkingEffort = 'off' | 'low' | 'max'
+/** 请求用的思考力度；被子深思档用 high（不在普通档位里出现） */
+export type EffortLevel = 'low' | 'high' | 'max'
+
+/** 被子档位（每床被子单独存，缺省 roleplay；档位重做方案 §四） */
+export type BlanketGear = 'roleplay' | 'deep' | 'eco' | 'expert'
+
+/**
+ * 一轮回复的请求参数快照：thinking=是否开思考链；effort=思考力度（开时才有）；
+ * search=是否声明联网搜索。存到每条回复上（chat/types.ts AssistantMessage），
+ * 续写/重试沿用原快照，重生成才取当前档位。
+ */
+export type ReplyParams = { thinking: boolean; effort?: EffortLevel; search: boolean }
+
+/** 普通模式：联网恒开（搜不搜模型自己判断），档位只决定思考强度 */
+export const normalReplyParams = (effort: ThinkingEffort): ReplyParams => ({
+  thinking: effort !== 'off',
+  ...(effort !== 'off' ? { effort } : {}),
+  search: true,
+})
+
+/** 被子档位 → 请求参数：全矩阵穷尽（角色扮演 off/off、深思 high/关、经济 off/开、专家 max/开） */
+export const gearReplyParams = (gear: BlanketGear): ReplyParams => {
+  switch (gear) {
+    case 'deep':
+      return { thinking: true, effort: 'high', search: false }
+    case 'eco':
+      return { thinking: false, search: true }
+    case 'expert':
+      return { thinking: true, effort: 'max', search: true }
+    default:
+      return { thinking: false, search: false }
+  }
+}
+
+/** 本机设置，存 localStorage：API Key、语言、主题、位置、朗读音色、思考强度档位与思考链显示开关、侧边栏收起状态 */
 type Settings = {
   apiKey: string | null
   locale: Locale
@@ -18,8 +54,12 @@ type Settings = {
   blanketStyle: BlanketStyle
   location: UserLocation | null
   ttsVoice: TtsVoice
-  thinking: boolean
-  search: boolean
+  /** 普通模式思考强度档位；联网恒开，不再单独存 search 开关 */
+  thinkingEffort: ThinkingEffort
+  /** 思考链显示开关（纯 UI，不影响请求与账单）：普通模式默认开 */
+  showThinkingNormal: boolean
+  /** 思考链显示开关：被子模式默认关（人设不当众露思考独白） */
+  showThinkingBlanket: boolean
   siderCollapsed: boolean
   /** 月度提醒线（元）：只提醒不拦截，超线不弹窗（2026-11-26 经济方案 §3.2） */
   monthlyReminderLine: number
@@ -32,11 +72,15 @@ const KEYS = {
   themePreference: 'chat-demo:theme-preference',
   blanketStyle: 'chat-demo:blanket-style',
   ttsVoice: 'chat-demo:tts-voice',
-  thinking: 'chat-demo:thinking',
-  search: 'chat-demo:search',
+  thinkingEffort: 'chat-demo:thinking-effort',
+  showThinkingNormal: 'chat-demo:show-thinking-normal',
+  showThinkingBlanket: 'chat-demo:show-thinking-blanket',
   siderCollapsed: 'chat-demo:sider-collapsed',
   monthlyReminderLine: 'chat-demo:monthly-reminder-line',
 } as const
+
+/** 旧版布尔思考开关的存储键（只读不写，迁移用；2026-11-26 经济方案只上线一天） */
+const LEGACY_THINKING_KEY = 'chat-demo:thinking'
 
 /** 备份/恢复要读写全部设置键；从这里出，避免备份侧自己抄一份清单后两处漂移。 */
 export const SETTINGS_KEYS: readonly string[] = Object.values(KEYS)
@@ -115,6 +159,24 @@ const initialMonthlyReminderLine = (): number => {
     : MONTHLY_REMINDER_LINE_DEFAULT
 }
 
+/**
+ * 思考强度初值 + 旧布尔迁移：存过新键直接用；没存过但存过旧 thinking 布尔时
+ * false→low（原自动档≈新默认经济）、true→max（原深度档）；全新用户 = 经济。
+ */
+const initialThinkingEffort = (): ThinkingEffort => {
+  const saved = read(KEYS.thinkingEffort)
+  if (saved === 'off' || saved === 'low' || saved === 'max') {
+    return saved
+  }
+  return read(LEGACY_THINKING_KEY) === 'true' ? 'max' : 'low'
+}
+
+/** 思考链显示开关初值：普通默认开、被子默认关（2026-11-27 拍板） */
+const initialFlag = (key: string, fallback: boolean): boolean => {
+  const saved = read(key)
+  return saved === null ? fallback : saved === 'true'
+}
+
 export const useSettings = create<Settings>(() => ({
   apiKey: read(KEYS.apiKey),
   locale: initialLocale(),
@@ -122,8 +184,9 @@ export const useSettings = create<Settings>(() => ({
   themePreference: initialThemePreference(),
   blanketStyle: initialBlanketStyle(),
   ttsVoice: initialTtsVoice(),
-  thinking: read(KEYS.thinking) === 'true',
-  search: read(KEYS.search) === 'true',
+  thinkingEffort: initialThinkingEffort(),
+  showThinkingNormal: initialFlag(KEYS.showThinkingNormal, true),
+  showThinkingBlanket: initialFlag(KEYS.showThinkingBlanket, false),
   siderCollapsed: read(KEYS.siderCollapsed) === 'true',
   monthlyReminderLine: initialMonthlyReminderLine(),
 }))
@@ -159,14 +222,19 @@ export const setApiKey = (apiKey: string | null) => {
   useSettings.setState({ apiKey })
 }
 
-export const setThinking = (thinking: boolean) => {
-  write(KEYS.thinking, String(thinking))
-  useSettings.setState({ thinking })
+export const setThinkingEffort = (thinkingEffort: ThinkingEffort) => {
+  write(KEYS.thinkingEffort, thinkingEffort)
+  useSettings.setState({ thinkingEffort })
 }
 
-export const setSearch = (search: boolean) => {
-  write(KEYS.search, String(search))
-  useSettings.setState({ search })
+export const setShowThinkingNormal = (showThinkingNormal: boolean) => {
+  write(KEYS.showThinkingNormal, String(showThinkingNormal))
+  useSettings.setState({ showThinkingNormal })
+}
+
+export const setShowThinkingBlanket = (showThinkingBlanket: boolean) => {
+  write(KEYS.showThinkingBlanket, String(showThinkingBlanket))
+  useSettings.setState({ showThinkingBlanket })
 }
 
 export const setSiderCollapsed = (siderCollapsed: boolean) => {
@@ -180,27 +248,8 @@ export const setMonthlyReminderLine = (line: number) => {
   useSettings.setState({ monthlyReminderLine: value })
 }
 
-// ── 搜索深度三态（2026-11-26 经济方案 §3.3）────────────────────
-// searchMode 是 thinking/search 两个既有字段的**派生视图**，不是第三套真值：
-//   自动 = thinking 关 + 搜索声明保留（官方：关思考时由模型自己判断搜不搜，一轮最多一次搜索）
-//   深度 = thinking 开 + 搜索声明保留（深度搜索，边想边搜、最多约 20 步工具调用）
-//   关   = 不声明搜索（答案只靠已知，thinking 随用户）
-// 输入区手动改 thinking/search → 派生档位自动跟随，不存在“档位与开关不一致”的状态，
-// 也就不需要“本次已手动调整”的提示逻辑（方案原文的提示条因派生设计而不需要）。
-
-export type SearchMode = 'auto' | 'deep' | 'off'
-
-export const getSearchMode = (thinking: boolean, search: boolean): SearchMode =>
-  !search ? 'off' : thinking ? 'deep' : 'auto'
-
-export const setSearchMode = (mode: SearchMode) => {
-  if (mode === 'auto') {
-    setThinking(false)
-    setSearch(true)
-  } else if (mode === 'deep') {
-    setThinking(true)
-    setSearch(true)
-  } else {
-    setSearch(false)
-  }
-}
+// ── 思考强度档位（2026-11-27 档位重做方案）────────────────────
+// thinkingEffort 是普通模式唯一的思考旋钮：off=普通（秒出）/ low=经济（默认）/
+// max=专家。联网不再单独开关——普通模式恒声明搜索工具，搜不搜模型自己判断
+//（官方机制：关思考时同样由模型判断，闲聊自然不搜）。
+// 被子模式不用这个字段：每床被子存自己的 chatGear（blanket.ts），覆盖全局。

@@ -1,12 +1,23 @@
 import { useState, type ReactNode } from 'react'
 import { useTranslate } from '../../i18n/index.js'
 import { openBlanketChat } from '../../services/chat/blanketChat.js'
-import { removeBlanket, updateBlanket, updatePack } from '../../services/memory/blanketStore.js'
+import {
+  removeBlanket,
+  setBlanketGear,
+  updateBlanket,
+  updatePack,
+} from '../../services/memory/blanketStore.js'
+import {
+  setShowThinkingBlanket,
+  useSettings,
+  type BlanketGear,
+} from '../../services/settings.js'
 import type { BlanketRecord } from '../../services/memory/blanket.js'
 import { exportBlanketMarkdown } from './exportBlanket.js'
 import { formatDate } from '../../utils/format.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
+import panelStyles from './BlanketSidePanel.module.css'
 import styles from './BlanketList.module.css'
 
 /**
@@ -48,6 +59,9 @@ export const BlanketDetail = ({ blanket, onClose }: { blanket: BlanketRecord; on
           <span>·</span>
           {t('blanketEditHint')}
         </div>
+
+        {/* 聊天档位（档位重做方案 2026-11-27 §四）：每床被子单独存，覆盖全局；带解释不带预估 */}
+        <GearSection blanket={blanket} />
 
         <TextSection
           title={t('blanketDetailPersona')}
@@ -147,6 +161,76 @@ export const BlanketDetail = ({ blanket, onClose }: { blanket: BlanketRecord; on
         )}
       </div>
     </Modal>
+  )
+}
+
+/**
+ * 聊天档位 + 显示思考过程（档位重做方案 §四）：四档预设覆盖 thinking×search 全矩阵，
+ * 缺省角色扮演；「显示思考过程」被子默认关——她不当众露思考独白，想看的人自己开。
+ */
+const BLANKET_GEAR_OPTIONS: {
+  value: BlanketGear
+  labelKey: 'blanketGearRoleplay' | 'blanketGearDeep' | 'blanketGearEco' | 'blanketGearExpert'
+  hintKey:
+    | 'blanketGearRoleplayHint'
+    | 'blanketGearDeepHint'
+    | 'blanketGearEcoHint'
+    | 'blanketGearExpertHint'
+}[] = [
+  { value: 'roleplay', labelKey: 'blanketGearRoleplay', hintKey: 'blanketGearRoleplayHint' },
+  { value: 'deep', labelKey: 'blanketGearDeep', hintKey: 'blanketGearDeepHint' },
+  { value: 'eco', labelKey: 'blanketGearEco', hintKey: 'blanketGearEcoHint' },
+  { value: 'expert', labelKey: 'blanketGearExpert', hintKey: 'blanketGearExpertHint' },
+]
+
+const GearSection = ({ blanket }: { blanket: BlanketRecord }) => {
+  const t = useTranslate()
+  const gear = blanket.chatGear ?? 'roleplay'
+  const showThinking = useSettings((state) => state.showThinkingBlanket)
+  const selected = BLANKET_GEAR_OPTIONS.find((option) => option.value === gear)
+  return (
+    <div className={styles.sectionBlock}>
+      <div className={styles.sectionTitle}>{t('blanketGearTitle')}</div>
+      <div role="radiogroup" aria-label={t('blanketGearTitle')} className={panelStyles.styleSwitch}>
+        {BLANKET_GEAR_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={gear === option.value}
+            className={
+              gear === option.value ? panelStyles.styleOptionActive : panelStyles.styleOption
+            }
+            onClick={() => void setBlanketGear(blanket.id, option.value)}
+          >
+            {t(option.labelKey)}
+          </button>
+        ))}
+      </div>
+      {selected ? <p className={styles.sectionEmpty}>{t(selected.hintKey)}</p> : null}
+      <div className={panelStyles.ledgerModeRow}>
+        <span className={panelStyles.ledgerModeLabel}>{t('showThinkingLabel')}</span>
+        <div className={panelStyles.styleSwitch}>
+          <button
+            type="button"
+            aria-pressed={showThinking}
+            className={showThinking ? panelStyles.styleOptionActive : panelStyles.styleOption}
+            onClick={() => setShowThinkingBlanket(true)}
+          >
+            {t('showThinkingOn')}
+          </button>
+          <button
+            type="button"
+            aria-pressed={!showThinking}
+            className={!showThinking ? panelStyles.styleOptionActive : panelStyles.styleOption}
+            onClick={() => setShowThinkingBlanket(false)}
+          >
+            {t('showThinkingOff')}
+          </button>
+        </div>
+      </div>
+      <p className={styles.sectionEmpty}>{t('showThinkingNote')}</p>
+    </div>
   )
 }
 

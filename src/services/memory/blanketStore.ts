@@ -9,6 +9,7 @@ import { create } from 'zustand'
 import { deleteBlanket, loadBlankets, saveBlanket } from '../chat/db.js'
 import type { BlanketRecord } from './blanket.js'
 import { invalidateBlanket } from './load.js'
+import type { BlanketGear } from '../settings.js'
 import type { MemoryPack } from '../../../engine/pack.js'
 
 /** 回收站保留天数：到期自动彻底删除 */
@@ -122,6 +123,10 @@ export const updateBlanket = async (
   await saveBlanket(next)
   await refreshBlankets()
 }
+
+/** 改被子档位（档位重做方案 2026-11-27 §四）：改完下一句话就按新档位发请求 */
+export const setBlanketGear = (id: string, chatGear: BlanketGear): Promise<void> =>
+  updateBlanket(id, (record) => ({ ...record, chatGear }))
 
 /** 这个会话是不是被子模式（绑在某床**在用**的被子上）；回收站里的被子对话退回普通模式 */
 export const blanketOfSession = (sessionId: string): BlanketRecord | undefined =>

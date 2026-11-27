@@ -10,6 +10,7 @@
  */
 
 import type { Message, Session } from '../chat/types.js'
+import type { BlanketGear } from '../settings.js'
 import { buildDynamicSegment } from '../../../engine/context.js'
 import {
   InvertedIndex,
@@ -43,6 +44,12 @@ export interface BlanketRecord {
   autoConsolidate?: boolean
   /** 整体印象自动更新；缺省 = 开。用户手改 impression 即接管为 false（2026-11-24 追加拍板） */
   impressionAuto?: boolean
+  /**
+   * 被子档位（档位重做方案 2026-11-27 §四）：roleplay=角色扮演（默认）/ deep=深思 /
+   * eco=经济 / expert=专家。覆盖全局设置，普通模式读全局；旧被子缺省 = roleplay，
+   * 不迁移。备份随被子记录整体走，无需单独处理。
+   */
+  chatGear?: BlanketGear
   pack: MemoryPack
   createdAt: number
   updatedAt: number

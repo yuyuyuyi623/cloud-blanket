@@ -1,8 +1,8 @@
 /**
- * 全局右上角：右侧抽屉，顶栏「她的角落 / 设置」（2026-11-26 经济方案 §3.2 拍板：价签退到后台，
- * 账本 tab 撤掉，用量与账单下沉到「设置」里）。原「账本」tab 位置放「设置」入口。
+ * 全局右上角：右侧抽屉，顶栏「她的角落 / 账本」（档位重做方案 2026-11-27 拍板：账本 tab 归位；
+ * 全局设置入口撤掉——左侧栏已有设置按钮，不重复）。
  *   · 「她的角落」：被子对话里 → 角色卡、她的日记；不在被子会话里 → 说明 + 被子列表 + 回收站 + 备份/恢复；
- *   · 「设置」：打开设置弹窗（抽屉自动收起，不留两层界面）。
+ *   · 「账本」：百分比进度条 + 当前模式行，点进度条展开具体花费（LedgerPanel）。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -25,12 +25,13 @@ import { reportStorageError } from '../../services/chat/db.js'
 import { BlanketDetail } from './BlanketDetail.js'
 import { ConsolidationPanel } from './ConsolidationPanel.js'
 import { DiaryDialog } from './DiaryDialog.js'
-import { openSettings } from '../settings/settingsDialogState.js'
+import { LedgerPanel } from './LedgerPanel.js'
 import styles from './BlanketSidePanel.module.css'
 
 export const BlanketSidePanel = () => {
   const t = useTranslate()
   const [open, setOpen] = useState(false)
+  const [tab, setTab] = useState<'corner' | 'ledger'>('corner')
   /** 备份导出中 / 恢复两步确认的待恢复文件 */
   const [backupBusy, setBackupBusy] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<File | null>(null)
@@ -107,24 +108,25 @@ export const BlanketSidePanel = () => {
             <div className={styles.tabs}>
               <button
                 type="button"
-                className={styles.tabActive}
-                aria-pressed="true"
+                className={tab === 'corner' ? styles.tabActive : styles.tab}
+                aria-pressed={tab === 'corner'}
+                onClick={() => setTab('corner')}
               >
                 {t('cornerTab')}
               </button>
-              {/* 原「账本」tab 的位置：设置入口（用量与账单在设置里，价签退到后台） */}
+              {/* 账本 tab 归位（档位重做方案 2026-11-27）：进度条 + 当前模式，钱藏一层 */}
               <button
                 type="button"
-                className={styles.tab}
-                onClick={() => {
-                  setOpen(false)
-                  openSettings('general')
-                }}
+                className={tab === 'ledger' ? styles.tabActive : styles.tab}
+                aria-pressed={tab === 'ledger'}
+                onClick={() => setTab('ledger')}
               >
-                {t('settings')}
+                {t('ledgerTab')}
               </button>
             </div>
-            {current ? (
+            {tab === 'ledger' ? (
+              <LedgerPanel />
+            ) : current ? (
               <>
                 <div className={styles.panelBlanket}>{current.name}</div>
                 <button
@@ -171,7 +173,7 @@ export const BlanketSidePanel = () => {
                 ))}
               </>
             )}
-            {trash.length ? (
+            {tab === 'corner' && trash.length ? (
               <>
                 <div className={styles.trashTitle}>{t('blanketTrashTitle')}</div>
                 {trash.map((item) => {
@@ -207,7 +209,8 @@ export const BlanketSidePanel = () => {
               </>
             ) : null}
 
-            {/* 报错日志：出问题时一键复制求助，贴给开发者或任意 AI */}
+            {/* 报错日志：出问题时一键复制求助，贴给开发者或任意 AI（仅她的角落 tab） */}
+            {tab === 'corner' ? (
             <button
               type="button"
               className={styles.entry}
@@ -220,8 +223,10 @@ export const BlanketSidePanel = () => {
               <IconCopyOutline16 />
               <span>{t('errorLogCopy')}</span>
             </button>
+            ) : null}
 
-            {/* 备份/恢复（v1.0.1 P0）：换手机/清缓存/换域名都会数据清零，这里是一键带走全部的口子 */}
+            {/* 备份/恢复（v1.0.1 P0）：换手机/清缓存/换域名都会数据清零，这里是一键带走全部的口子（仅她的角落 tab） */}
+            {tab === 'corner' ? (
             <div className={styles.backupBlock}>
               <div className={styles.trashTitle}>{t('backupTitle')}</div>
               <button
@@ -280,8 +285,10 @@ export const BlanketSidePanel = () => {
                 }}
               />
             </div>
+            ) : null}
 
-            {/* 界面风格一键切换：不用进设置翻，点一下立刻变色 */}
+            {/* 界面风格一键切换：不用进设置翻，点一下立刻变色（仅她的角落 tab） */}
+            {tab === 'corner' ? (
             <div className={styles.styleRow}>
               <span className={styles.styleLabel}>{t('blanketPanelStyleLabel')}</span>
               <div className={styles.styleSwitch}>
@@ -305,6 +312,7 @@ export const BlanketSidePanel = () => {
                 ))}
               </div>
             </div>
+            ) : null}
           </aside>
         </>
       ) : null}

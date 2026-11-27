@@ -146,8 +146,9 @@ export const MessageList = ({
       <div ref={isMobile ? undefined : scrollRef} className={styles.container}>
         <div ref={isMobile ? scrollRef : undefined} className={styles.scroll}>
           <div ref={contentRef} className={styles.column}>
-            {messages.map((message, index) =>
-              message.role === 'user' ? (
+            {messages.map((message, index) => {
+              const previous = index > 0 ? messages[index - 1] : undefined
+              return message.role === 'user' ? (
                 <UserMessage
                   key={message.id}
                   sessionId={session.id}
@@ -169,9 +170,10 @@ export const MessageList = ({
                   busy={streaming}
                   versions={versions.get(message.id) ?? EMPTY_VERSIONS}
                   onSelectVersion={selectVersion}
+                  question={previous?.role === 'user' ? previous.content : undefined}
                 />
               )
-            )}
+            })}
           </div>
         </div>
         {footer}

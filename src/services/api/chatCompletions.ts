@@ -132,6 +132,10 @@ export const toWireRequest = (body: CreateMessageRequest) => ({
       : []),
   ],
   thinking: body.thinking,
+  // 思考力度：enabled 时才传（disabled 传了会被忽略，也免得线格式噪音）
+  ...(body.thinking.type === 'enabled' && body.reasoning_effort
+    ? { reasoning_effort: body.reasoning_effort }
+    : {}),
   safety_check: body.safety_check,
   tools: body.tools,
   ...(body.title ? { title: body.title } : {}),

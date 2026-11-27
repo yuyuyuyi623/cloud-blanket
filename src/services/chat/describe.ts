@@ -58,3 +58,14 @@ export const describeReply = (reply: AssistantMessage): Notice | null => {
   }
   return null
 }
+
+/**
+ * 用户在追问里质疑了上一条回答（深挖按钮显示条件之二，档位重做方案 2026-11-27 §五）：
+ * 固定短语枚举，不是关键词分类器——用户自己表达不信任时，无论本轮搜没搜都值得给深挖入口。
+ */
+const DOUBT_PHRASES = ['确定吗', '不对吧', '再查查', '真的吗', '错的', 'are you sure', 'really?']
+
+export const isDoubtQuestion = (text: string): boolean => {
+  const lower = text.toLowerCase()
+  return DOUBT_PHRASES.some((phrase) => lower.includes(phrase))
+}

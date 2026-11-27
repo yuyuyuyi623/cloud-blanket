@@ -13,7 +13,7 @@ import {
   uploadAttachment,
   useUploads,
 } from '../attachments.js'
-import { useSettings } from '../settings.js'
+import { useSettings, gearReplyParams, normalReplyParams, type ReplyParams } from '../settings.js'
 import { maybeAutoConsolidate } from '../memory/consolidationRunner.js'
 import { recordMessageUsage } from '../usage/ledger.js'
 import { buildStableSegment, pickSeedTurns, seedInjectionCount } from '../../../engine/context.js'
@@ -294,21 +294,32 @@ export const bindChatPersistence = () => {
   }
 }
 
-/** 按当前开关创建回复：深度思考对应 thinking，智能搜索控制 deepseek_web_search。 */
+/**
+ * 创建回复骨架：这里先按全局档位填初值；真正的请求参数在 streamReply 里落定
+ * （被子会话按被子档位覆盖，深挖/续写/重试沿用原快照）。
+ */
 const createReply = (): AssistantMessage => {
-  const { thinking, search } = useSettings.getState()
+  const params = normalReplyParams(useSettings.getState().thinkingEffort)
   return {
     id: createId(),
     role: 'assistant',
     createdAt: Date.now(),
     model: MODEL,
-    thinking,
-    search,
+    thinking: params.thinking,
+    search: params.search,
+    ...(params.effort ? { thinkingEffort: params.effort } : {}),
     prefix: true,
     status: 'pending',
     blocks: [],
   }
 }
+
+/** 从回复快照还原请求参数（续写/重试沿用原配置；旧记录缺省按官方默认 high） */
+const replyParamsOf = (reply: AssistantMessage): ReplyParams => ({
+  thinking: reply.thinking ?? false,
+  ...(reply.thinking ? { effort: reply.thinkingEffort ?? 'high' } : {}),
+  search: reply.search ?? true,
+})
 
 /** 仍在生成中的回复（页面关闭或导出时未结束）按「已停止」处理 */
 const settleInterrupted = (session: Session): Session => {
@@ -823,8 +834,8 @@ export const regenerateReply = (sessionId: string, messageId?: string) => {
 }
 
 /**
- * 再深入查一下（2026-11-26 经济方案 §三）：同一个问题挂一个「深度思考 + 联网」的版本。
- * 自动档先按最省的方式答，用户看完觉得需要核对再点——升级路径从事前设置变成事后一键。
+ * 再深入查一下（档位重做方案 2026-11-27 §五）：同一个问题挂一个专家档（max+联网）的版本。
+ * 经济档先按最省的方式答，搜索 ≥2 次或用户追问质疑时才给入口——升级路径从事前设置变成事后一键。
  * 不覆盖原回答（走 appendBranch 分支），成本明明白白：一次约 2~3 分。
  */
 export const deepDiveReply = (sessionId: string, messageId: string) => {
@@ -842,13 +853,18 @@ export const deepDiveReply = (sessionId: string, messageId: string) => {
     return
   }
   const history = path.slice(0, index - 1)
-  const reply = { ...createReply(), thinking: true, search: true }
+  const reply = { ...createReply(), thinking: true, thinkingEffort: 'max' as const, search: true }
   updateSession(sessionId, (s) => ({
     ...appendBranch(s, question.id, [reply]),
     updatedAt: Date.now(),
   }))
   persist(sessionId)
-  void streamReply(sessionId, reply, { history, question })
+  // 显式传专家档参数，防止 streamReply 按全局/被子档位覆盖
+  void streamReply(sessionId, reply, {
+    history,
+    question,
+    params: gearReplyParams('expert'),
+  })
 }
 
 /** 编辑提问后新增同父版本，保留原文件；旧问题的所有回答与后续对话仍可切回。 */
@@ -915,13 +931,14 @@ export const continueReply = (sessionId: string, messageId: string) => {
   ) {
     return
   }
-  const { thinking, search } = useSettings.getState()
+  const { thinkingEffort } = useSettings.getState()
   const reply: AssistantMessage = {
     ...previous,
-    // 未记录请求配置的回复，续写时使用默认模型和当前开关。
+    // 未记录请求配置的回复，续写时使用默认模型和当前档位。
     model: previous.model ?? MODEL,
-    thinking: previous.thinking ?? thinking,
-    search: previous.search ?? search,
+    thinking: previous.thinking ?? thinkingEffort !== 'off',
+    thinkingEffort: previous.thinkingEffort,
+    search: previous.search ?? true,
     status: 'pending',
     stopReason: undefined,
     stopDetails: undefined,
@@ -930,7 +947,12 @@ export const continueReply = (sessionId: string, messageId: string) => {
   updateReply(sessionId, reply)
   updateSession(sessionId, (s) => ({ ...s, updatedAt: Date.now() }))
   persist(sessionId)
-  void streamReply(sessionId, reply, { history: path.slice(0, -2), question, prefix: previous })
+  void streamReply(sessionId, reply, {
+    history: path.slice(0, -2),
+    question,
+    prefix: previous,
+    params: replyParamsOf(reply),
+  })
 }
 
 /** 附件补传失败后重试：保留原回答位置，重新补传并请求 */
@@ -956,10 +978,20 @@ export const retryUpload = (sessionId: string, messageId: string) => {
   const reply: AssistantMessage = { ...previous, status: 'pending', error: undefined }
   updateReply(sessionId, reply)
   persist(sessionId)
-  void streamReply(sessionId, reply, { history: path.slice(0, index - 1), question })
+  void streamReply(sessionId, reply, {
+    history: path.slice(0, index - 1),
+    question,
+    params: replyParamsOf(reply),
+  })
 }
 
-type Request = { history: Message[]; question: UserMessage; prefix?: AssistantMessage }
+type Request = {
+  history: Message[]
+  question: UserMessage
+  prefix?: AssistantMessage
+  /** 显式请求参数（深挖/续写/重试沿用原快照）；缺省时 streamReply 按被子档位或全局档位推导 */
+  params?: ReplyParams
+}
 
 /**
  * 将 serverId 写回所有引用同一附件的消息。传入 null 会清除超限旧图的 ID，触发补传。
@@ -1231,7 +1263,20 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
   // 装配失败（被子被删、原料损坏）就退回普通模式，聊天不该因为记忆层挂掉而发不出去。
   const blanket = blanketOfSession(sessionId)
   const blanketMemory = blanket ? await getBlanketMemory(blanket.id) : undefined
-  let reply = initial
+  // 请求参数落定：显式传入（深挖/续写/重试）> 被子档位 > 全局档位。
+  // 快照写回回复本体，UI 展示与账本归因读的都是它。
+  const params =
+    request.params ??
+    (blanket
+      ? gearReplyParams(blanket.chatGear ?? 'roleplay')
+      : normalReplyParams(useSettings.getState().thinkingEffort))
+  let reply: AssistantMessage = {
+    ...initial,
+    thinking: params.thinking,
+    search: params.search,
+    thinkingEffort: params.effort,
+  }
+  updateReply(sessionId, reply)
   let frame = 0
   /** 本轮请求发出时刻，峰谷判据（账本方案 §3.2） */
   let requestTs = Date.now()
@@ -1298,9 +1343,12 @@ const streamReply = async (sessionId: string, initial: AssistantMessage, request
             system: stable,
             ...(dynamic ? { systemSuffix: dynamic } : {}),
             messages,
-            thinking: { type: initial.thinking ? 'enabled' : 'disabled' },
+            thinking: { type: params.thinking ? 'enabled' : 'disabled' },
+            ...(params.thinking && params.effort
+              ? { reasoning_effort: params.effort }
+              : {}),
             safety_check: SAFETY_CHECK,
-            tools: serverTools(initial.search ?? false),
+            tools: serverTools(params.search),
             ...(titleRequests.has(controller) ? { title: { enabled: true } } : {}),
           },
           controller.signal

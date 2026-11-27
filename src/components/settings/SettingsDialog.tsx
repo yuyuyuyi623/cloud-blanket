@@ -27,15 +27,13 @@ import {
   type BlanketStyle,
   type ThemePreference,
 } from '../../services/settings.js'
-import { getUsagePage, monthProgress } from '../../services/usage/ledger.js'
 import { useTranslate, type TranslationKey, type TranslationMessage } from '../../i18n/index.js'
 import { Button } from '../base/Button.js'
 import { Modal } from '../base/Modal.js'
 import { Select } from '../base/Select.js'
 import { showToast } from '../base/toastState.js'
 import { ApiKeyConfirm, ApiKeyField, useApiKeyEditor } from './ApiKeyField.js'
-import { closeSettings, openSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
-import { LedgerPanel } from '../blanket/LedgerPanel.js'
+import { closeSettings, useSettingsDialog, type SettingsSection } from './settingsDialogState.js'
 import styles from './Settings.module.css'
 
 /**
@@ -56,11 +54,6 @@ const sections: { value: SettingsSection; label: TranslationKey; icon: ReactNode
     icon: <IconSettingsOutline16 />,
   },
   { value: 'data', label: 'settingDialogAsideDataOptionLabel', icon: <IconDataOutline16 /> },
-  {
-    value: 'usage',
-    label: 'usageSectionLabel',
-    icon: <IconDataOutline16 />,
-  },
 ]
 
 const SettingsContent = () => {
@@ -110,12 +103,9 @@ const SettingsContent = () => {
               <TtsVoiceSetting />
               <LocationSetting />
             </>
-          ) : section === 'usage' ? (
-            <LedgerPanel />
           ) : (
             <>
               <ApiKeyField editor={apiKeyEditor} />
-              <UsageEntry />
               <ExportHistory disabled={historyBusy} />
               <InstallRow />
               <StorageUsage />
@@ -463,39 +453,6 @@ const SettingCell = ({
       </div>
       {action}
     </div>
-  )
-}
-
-/**
- * 一级入口（经济方案 §3.2）：数据管理页里的折叠摘要一行，只露百分比、不露价签。
- * 点它跳到「用量与账单」二级页——明细两步可达，绝不上锁。
- */
-const UsageEntry = () => {
-  const t = useTranslate()
-  const reminderLine = useSettings((state) => state.monthlyReminderLine)
-  const [monthCost, setMonthCost] = useState<number | null>(null)
-  useEffect(() => {
-    void getUsagePage()
-      .then((page) => setMonthCost(page.month.cost))
-      .catch(() => setMonthCost(0))
-  }, [])
-  const percent = monthProgress(monthCost ?? 0, reminderLine)
-  return (
-    <SettingCell
-      label={t('usageMonth')}
-      description={percent > 0 ? undefined : t('usageEmptyHint')}
-      status={null}
-      action={
-        <Button
-          variant="outlined"
-          size="m"
-          className={styles.cellButton}
-          onClick={() => openSettings('usage')}
-        >
-          {monthCost === null ? '…' : percent > 0 ? `${percent}%` : t('usageUnder1')}
-        </Button>
-      }
-    />
   )
 }
 

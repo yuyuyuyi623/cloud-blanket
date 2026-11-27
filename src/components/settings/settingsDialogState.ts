@@ -1,8 +1,8 @@
 import { create } from 'zustand'
 import { useSettings } from '../../services/settings.js'
 
-/** 设置弹窗的分组：通用设置 / 数据管理 / 用量与账单（2026-11-26 经济方案 §3.2） */
-export type SettingsSection = 'general' | 'data' | 'usage'
+/** 设置弹窗的分组：通用设置 / 数据管理（用量与账单回到抽屉「账本」tab，档位重做方案 2026-11-27） */
+export type SettingsSection = 'general' | 'data'
 
 /** 设置弹窗：侧边栏底部、没有 API Key 时的操作与 401 提示都可以打开；section 为打开时选中的分组 */
 export const useSettingsDialog = create(() => ({

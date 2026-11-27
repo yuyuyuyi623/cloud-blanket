@@ -435,6 +435,11 @@
   margin: 4px 0 2px;
 }
 
+/* 进度条本身可点：点开才看到钱（档位重做方案 2026-11-27 §三） */
+.ledgerProgressClickable {
+  cursor: pointer;
+}
+
 .ledgerProgress {
   flex: 1;
   height: 6px;

@@ -2,10 +2,12 @@ import { useTranslate } from '../../i18n/index.js'
 import clsx from 'clsx'
 import { memo } from 'react'
 import { IconRefreshOutline16, IconSearchOutline16, IconWarningOutline16 } from '../base/icons.js'
-import { describeReply } from '../../services/chat/describe.js'
+import { describeReply, isDoubtQuestion } from '../../services/chat/describe.js'
 import { canContinueReply } from '../../services/chat/reply.js'
 import { continueReply, deepDiveReply, regenerateReply } from '../../services/chat/store.js'
 import { stopReadAloud } from '../../services/speech/readAloud.js'
+import { useSettings } from '../../services/settings.js'
+import { useBlankets } from '../../services/memory/blanketStore.js'
 import type { AssistantMessage as AssistantMessageType } from '../../services/chat/types.js'
 import { openSettings } from '../settings/settingsDialogState.js'
 import { IconButton } from '../base/IconButton.js'
@@ -34,6 +36,7 @@ export const AssistantMessage = memo(function AssistantMessage({
   busy,
   versions,
   onSelectVersion,
+  question,
 }: {
   sessionId: string
   message: AssistantMessageType
@@ -42,9 +45,20 @@ export const AssistantMessage = memo(function AssistantMessage({
   busy: boolean
   versions: MessageVersions
   onSelectVersion: SelectMessageVersion
+  /** 本条回答对应的提问原文：追问质疑时给深挖入口（§五） */
+  question?: string
 }) {
   const t = useTranslate()
   const view = useReplyView(message, streaming)
+  // 被子会话 → 显示开关读 showThinkingBlanket（默认关，人设不露思考独白）；普通会话读 showThinkingNormal
+  const blanket = useBlankets((state) =>
+    state.list.find(
+      (item) => item.chatSessionId === sessionId && item.deletedAt === undefined
+    )
+  )
+  const showThinking = useSettings((state) =>
+    blanket ? state.showThinkingBlanket : state.showThinkingNormal
+  )
   const panelEntry = useSearchPanel((state) => state.entry)
   const notice = streaming ? null : describeReply(message)
   // 安全拒绝：已下发的思考与正文按协议丢弃，只显示模板答复。
@@ -64,6 +78,7 @@ export const AssistantMessage = memo(function AssistantMessage({
           view={view}
           streaming={streaming}
           hasResponse={!!responseText}
+          showThinking={showThinking}
         />
       )}
       {answer ? (
@@ -156,9 +171,12 @@ export const AssistantMessage = memo(function AssistantMessage({
                 regenerateReply(sessionId, message.id)
               }}
             />
-            {/* 再深入查一下（经济方案 §三）：仅自动档（未开思考）且本轮真搜过才出现——
-                90% 的问题 0.8 分够用，要核对的用户自己点，一次约 2~3 分，成本明明白白 */}
-            {!message.thinking && view.searchResults.length > 0 ? (
+            {/* 再深入查一下（档位重做方案 §五）：本轮搜索 ≥2 次（多来源调研题）或用户追问质疑才出现；
+                被子会话不显示（人设对话不引导查资料）。点击以专家档重跑本问，一次约 2~3 分 */}
+            {!blanket &&
+            !refused &&
+            ((message.usage?.server_tool_use?.web_search_requests ?? 0) >= 2 ||
+              isDoubtQuestion(question ?? '')) ? (
               <IconButton
                 icon={<IconSearchOutline16 />}
                 tooltip={t('deepDive')}

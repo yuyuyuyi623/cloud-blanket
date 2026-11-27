@@ -161,6 +161,8 @@ export type CreateMessageRequest = {
   systemSuffix?: string
   messages: MessageParam[]
   thinking: { type: 'enabled' | 'disabled' }
+  /** 思考力度（thinking enabled 时才传）；官方取值 low/high/max，默认 high */
+  reasoning_effort?: 'low' | 'high' | 'max'
   tools: (DeepseekWebSearchTool | DeepseekReadUrlTool)[]
   safety_check: { level: 'high' }
   title?: { enabled: boolean }
