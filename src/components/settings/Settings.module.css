@@ -424,6 +424,8 @@
 }
 
 .deleteConfirm {
+  /* 旧浏览器不认 dvh 会整条丢弃声明，先给一行 vh 兜底（官方 6da0786 只盖了 App.module.css） */
+  max-height: calc(100vh - 32px);
   max-height: calc(100dvh - 32px);
   overflow-y: auto;
 }
