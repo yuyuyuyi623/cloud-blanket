@@ -50,9 +50,10 @@ const useTicker = (active: boolean, interval: number) => {
 
 /**
  * 思考与工具步骤的时间线：
- * 开启深度思考时带可折叠的标题（正在思考 / 正在搜索 / 正在浏览网页 / 已思考（用时 N 秒）），
- * 默认折叠——动态灰条就是加载动画（档位重做方案 2026-11-27：人怕的不是慢，是沉默）；
- * 未开启时只有工具步骤（如普通搜索的「已阅读 N 个网页」）。
+ * 开启深度思考时带可折叠的标题（正在思考 / 正在搜索 / 正在浏览网页 / 已思考（用时 N 秒））；
+ * 展开行为仿官方网页（2026-11-27 12:27 羽翼拍板）：思考中自动展开——流式内容逐行)
+ * 蹦出来就是天然的进度条；一开始正式回答就自动收起，之后随时点标题手动展开；
+ * 未开启思考时只有工具步骤（如普通搜索的「已阅读 N 个网页」）。
  * showThinking=false（显示思考过程开关关）时思考链完全不渲染，工具行照常显示。
  */
 export const ReplyArea = memo(function ReplyArea({
@@ -70,31 +71,38 @@ export const ReplyArea = memo(function ReplyArea({
   showThinking?: boolean
 }) {
   useTranslate()
-  const [open, setOpen] = useState(false)
+  /** 手动开合优先；null = 跟随自动阶段（思考中展开/回答收起），阶段切换时重置 */
+  const [manual, setManual] = useState<boolean | null>(null)
   const titleActive = streaming && !hasResponse
   useTicker(titleActive, 1000)
   const steps = showThinking ? view.steps : view.steps.filter((step) => step.type !== 'thinking')
-  if (steps.length === 0 && !(message.thinking && streaming && showThinking)) {
-    return null
-  }
   // 未记录请求开关时，按是否有思考内容显示标题。
   const thinking = showThinking
     ? (message.thinking ?? steps.some((step) => step.type === 'thinking'))
     : false
+  /** 自动阶段：正在思考（还没开始答正文）→ 展开；一旦开始答或结束 → 收起 */
+  const autoPhase = titleActive && thinking
+  useEffect(() => {
+    setManual(null)
+  }, [autoPhase])
+  if (steps.length === 0 && !(message.thinking && streaming && showThinking)) {
+    return null
+  }
   const title = thinking ? getAreaTitle(view, streaming, Date.now(), hasResponse) : null
   const stopped = !streaming && !hasResponse
+  const expanded = manual ?? autoPhase
   return (
     <div className={styles.area}>
       {title ? (
-        <div className={styles.title} onClick={() => setOpen((value) => !value)}>
+        <div className={styles.title} onClick={() => setManual(!expanded)}>
           <span className={clsx(styles.titleIcon, stopped && styles.stoppedIcon)}>
             <IconThinkOutline16 />
           </span>
           <span className={clsx(styles.titleText, titleActive && styles.shimmer)}>{title}</span>
-          {open ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
+          {expanded ? <IconChevronDownOutline14 /> : <IconChevronRightOutline14 />}
         </div>
       ) : null}
-      {open || !title ? (
+      {expanded || !title ? (
         <div className={styles.steps}>
           {steps.map((step, index) => (
             <StepItem
