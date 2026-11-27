@@ -118,7 +118,9 @@ export function renderBlockText(messages: ParsedMessage[]): string {
       const who = m.role === 'user' ? '你' : '她';
       const when = m.at ? `（${m.at.slice(0, 10)}）` : '';
       const flag = m.unfinished ? `〔未说完：${m.unfinished}〕` : '';
-      return `${who}${when}${flag}：${m.text}`;
+      // 纯附件消息（无正文）：用中性描述兜底，措辞在代码常量里、不走模型（附件进蒸馏方案 §3.1）
+      const body = m.text || (m.files?.length ? `（发来附件：${m.files.map((f) => f.name).join('、')}）` : '');
+      return `${who}${when}${flag}：${body}`;
     })
     .join('\n\n');
 }

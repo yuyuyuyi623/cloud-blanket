@@ -8,6 +8,7 @@
  */
 
 import {
+  BACKSTORY_MAX_CHARS,
   CORE_MEMORY_CHARS,
   CORE_MEMORY_LIMIT,
   EPISODES_CHARS,
@@ -102,6 +103,14 @@ export interface MemoryPack {
   facts: Fact[];
   summary: string;
   diary: DiaryEntry[];
+  /**
+   * 身世档案 + 世界设定摘要（附件进蒸馏，2026-11-27）：≤BACKSTORY_MAX_CHARS=4000 字。
+   *
+   * 只由「人设蒸」（身世文档通道）产出——**巩固零接触**，严格程度同 persona。
+   * 旧包缺省为 undefined；不升 pack.version（加可选字段，normalize 缺省兜底）。
+   * 超 4000 字的全文不常驻，靠检索召回（方案 四）。
+   */
+  backstory?: string;
   /**
    * 原声样本（v1.0.2 层一，A5）：**冻结区**——巩固不碰，重蒸才更新。
    * 唯一合法来源是原始导出包里的 assistant 消息；被子对话不补样本（红线，见方案 §③）。
@@ -433,6 +442,10 @@ export function normalizePack(raw: unknown): MemoryPack {
       typeof o.summary === 'string'
         ? softClip(o.summary.trim(), SUMMARY_MAX_CHARS, TEXT_OVERFLOW_RATIO)
         : '',
+    backstory:
+      typeof o.backstory === 'string' && o.backstory.trim()
+        ? softClip(o.backstory.trim(), BACKSTORY_MAX_CHARS, TEXT_OVERFLOW_RATIO)
+        : undefined,
     diary: normalizeDiary(o.diary),
     voiceSamples: normalizeVoiceSamples(o.voiceSamples),
     seedTurns: normalizeSeedTurns(o.seedTurns),

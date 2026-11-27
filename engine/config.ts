@@ -98,6 +98,23 @@ export const SUMMARY_MAX_CHARS = 2000;
 export const TEXT_OVERFLOW_RATIO = 1.15;
 /** persona 卡约 2000 字（K3） */
 export const PERSONA_MAX_CHARS = 2000;
+/**
+ * 身世档案上限（附件进蒸馏方案 §四，2026-11-27）：4000 字。
+ *
+ * 常驻成本诚实口径：4000 字 ≈ 2800 token ≈ +¥0.0028/轮（谷价），首轮后命中缓存近乎为零。
+ * 超出的身世全文不进上下文，靠检索召回细节（方案 四）。
+ */
+export const BACKSTORY_MAX_CHARS = 4000;
+/**
+ * 附件读取的硬上限（附件进蒸馏方案 六·7）：
+ *   - 单个文本附件超过 4MB 不读（疑似二进制/超长文库）；
+ *   - 整包附件正文合计超过 100 万字截断——100 万字 ≈ 50 块 ≈ ¥1.25 谷价封顶，
+ *     防止有人往导出包里塞一整个书库。
+ * B 路（零散附件）拼进消息时单件另裁到 2 万字（softClip 按句读，不切半句）。
+ */
+export const ATTACHMENT_MAX_BYTES = 4_000_000;
+export const ATTACHMENT_TOTAL_MAX_CHARS = 1_000_000;
+export const ATTACHMENT_MERGE_MAX_CHARS = 20_000;
 /** 准入制反同义覆盖阈值：字符集合 Jaccard > 0.45 拒绝替换（E3） */
 export const JACCARD_THRESHOLD = 0.45;
 /**

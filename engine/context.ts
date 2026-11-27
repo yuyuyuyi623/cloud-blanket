@@ -3,7 +3,7 @@
  *
  * 位置规则（清单一/十·1/十·4，P0 级）：
  *   [ 稳定段(system) → 历史 → 动态段(system，永远最后一条) ]
- *   - 稳定段拼接顺序：persona → core → episodes(事件) → 手动记住 → facts → impression → 摘要
+ *   - 稳定段拼接顺序：persona → backstory（身世）→ 原声样本 → core → episodes(事件) → 手动记住 → facts → impression → 摘要
  *   - FTS 检索结果并入动态段（v1.1 拍板：动态段本来每轮都变、不进缓存，并入后缓存损失为零）
  *   - 无历史时合成单条 system：`${stable}\n\n${dynamic}`（十·4）
  *   - limitConversationHistory 保留开头 system，所以动态段因为在末尾而天然保留——
@@ -83,6 +83,14 @@ export function buildStableSegment(
   out.push('【你是谁】');
   out.push(pack.persona.card || '（暂无人格卡。）');
   out.push('');
+
+  // 身世档案（附件进蒸馏，2026-11-27）：紧接 persona —— "她是谁"的来处。
+  // 位置固定在缓存前缀内；只有人设蒸/重蒸会更新它，巩固零接触（方案 §4）。
+  if (pack.backstory) {
+    out.push('【你的身世与来历】');
+    out.push(pack.backstory);
+    out.push('');
+  }
 
   // 原声样本（v1.0.2 层一）：紧跟 persona 之后——语义上属于"她是谁"，且位置固定进缓存前缀。
   // 用途说明必须写在标题里，否则模型会把这些话当素材引用/复述。

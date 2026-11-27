@@ -114,6 +114,11 @@ export class ZipDirectory {
     return this.entries.map((e) => e.name);
   }
 
+  /** 条目元信息（大小过滤用：附件动辄 MB 级，读之前先看 uncompressedSize） */
+  info(name: string): ZipEntryInfo | undefined {
+    return this.byName.get(name);
+  }
+
   /** 按需读一个条目的完整内容（内存峰值 ≈ 该条目） */
   async readEntry(name: string): Promise<Uint8Array> {
     const e = this.byName.get(name);

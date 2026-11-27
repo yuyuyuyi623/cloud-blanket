@@ -13,12 +13,15 @@
 import type { Session } from '../chat/types.js'
 import type { RangeReader } from '../../../engine/zip-reader.js'
 import {
+  loadAttachmentsFromReader,
   loadSessionsFromReader,
   chunkMessagesWithQuota,
   type LoadResult,
   type ParsedSession,
 } from '../../../engine/parse.js'
 import { renderBlockText, runDistill, type DistillBlockInput, type DistillRunResult, type DistillProgress } from '../../../engine/distill.js'
+import { runPersonaDistill } from '../../../engine/persona-distill.js'
+import { clipMaterialAttachment, type AttachmentDoc } from '../../../engine/attachment-scan.js'
 import { collectSessionTexts } from '../../../engine/content-search.js'
 import { normalizePack, normalizeSeedTurns, type SeedTurn } from '../../../engine/pack.js'
 import { SEED_TURNS_ROUNDS } from '../../../engine/config.js'
@@ -55,6 +58,13 @@ export const readSelectedSessions = (file: File, sessionIds: Set<string>): Promi
   loadSessionsFromReader(fileRangeReader(file), { withMessages: true, onlyIds: sessionIds })
 
 /**
+ * 粗扫附件（附件进蒸馏方案 §3.2 第一层）：只读文本类附件，图片/PDF 全跳过。
+ * 放在粗扫阶段做的理由：确认页要按附件字数出预估，钱花之前就得看见数字。
+ */
+export const scanArchiveAttachments = (file: File): Promise<AttachmentDoc[]> =>
+  loadAttachmentsFromReader(fileRangeReader(file)).then((result) => result.docs)
+
+/**
  * 内容搜索用：把整包正文读成 sessionId → 纯文本（每会话约 1 万字，全库十几 MB）。
  * 只在用户真的去搜"她说过的一句话"时调一次，之后搜索走内存子串扫描。
  */
@@ -69,22 +79,73 @@ export interface ImportPlan {
   estimate: DistillEstimate
 }
 
+/**
+ * B 路（普通资料）拼进消息：单件裁到 2 万字（按句读），拼到引用它的那条用户消息后面。
+ * 找不到对应消息（老包没有 export_path）就拼到该会话第一条用户消息上。
+ * 不修改原对象：返回新数组，预估与实际蒸馏共用同一份拼装结果（两处口径必须是同一个）。
+ */
+const mergeMaterialDocs = (
+  sessions: ParsedSession[],
+  docs: AttachmentDoc[],
+): ParsedSession[] => {
+  if (!docs.length) {
+    return sessions
+  }
+  return sessions.map((session) => {
+    const material = docs.filter((doc) => doc.sessionId === session.id && doc.tag === 'material' && doc.text.trim())
+    if (!material.length) {
+      return session
+    }
+    const messages = session.messages.map((message) => ({ ...message }))
+    for (const doc of material) {
+      const target =
+        messages.find(
+          (message) =>
+            message.role === 'user' &&
+            message.files?.some((file) => file.name === doc.name || file.path.endsWith(doc.name)),
+        ) ?? messages.find((message) => message.role === 'user')
+      if (!target) {
+        continue
+      }
+      const piece = `〔附件：${doc.name}〕\n${clipMaterialAttachment(doc.text)}`
+      target.text = target.text ? `${target.text}\n\n${piece}` : piece
+    }
+    return { ...session, messages, words: messages.reduce((sum, m) => sum + m.text.length, 0) }
+  })
+}
+
 /** 勾选的会话 → 计划行与预估（金额/时长口径只在 engine/estimate 里有一份） */
-export const buildPlan = (sessions: ParsedSession[]): ImportPlan => {
-  const rows: PlanRow[] = sessions.map((session) => ({
+export const buildPlan = (sessions: ParsedSession[], attachmentDocs: AttachmentDoc[] = []): ImportPlan => {
+  const effective = mergeMaterialDocs(sessions, attachmentDocs)
+  const rows: PlanRow[] = effective.map((session) => ({
     sessionId: session.id,
     title: session.title,
     userTurns: session.userTurns,
     words: session.words,
     blocks: roughBlocks(session.words),
   }))
+  // A 路身世文档单独计块：它不走对话块，但钱是实打实要花的
+  const personaDocs = attachmentDocs.filter((doc) => doc.tag === 'persona' && doc.text)
+  const personaWords = personaDocs.reduce((sum, doc) => sum + doc.words, 0)
+  if (personaWords > 0) {
+    rows.push({
+      sessionId: '__attachments__',
+      title: '身世文档',
+      userTurns: 0,
+      words: personaWords,
+      blocks: roughBlocks(personaWords),
+    })
+  }
   return { rows, estimate: estimateDistill(rows) }
 }
 
-/** 选中的会话 → 蒸馏块（按消息边界切，一条消息不劈两半；块配额按时间三段递增，A7-B） */
-export const buildBlocks = (sessions: ParsedSession[]): DistillBlockInput[] => {
+/** 选中的会话 + 附件 → 蒸馏块（B 路先拼进消息，再按消息边界切；一条消息不劈两半） */
+export const buildBlocks = (
+  sessions: ParsedSession[],
+  attachmentDocs: AttachmentDoc[] = [],
+): DistillBlockInput[] => {
   const blocks: DistillBlockInput[] = []
-  for (const session of sessions) {
+  for (const session of mergeMaterialDocs(sessions, attachmentDocs)) {
     for (const chunk of chunkMessagesWithQuota(session.messages)) {
       blocks.push({
         blockIndex: blocks.length,
@@ -151,27 +212,61 @@ export const pickSeedTurns = (sessions: ParsedSession[]): SeedTurn[] => {
 
 export interface BlanketDistillOptions {
   apiKey: string
+  /** 附件（两路都从这进：A 路走人设蒸，B 路随对话块蒸） */
+  attachmentDocs?: AttachmentDoc[]
   onProgress?: (progress: DistillProgress) => void
 }
 
 /**
  * 跑蒸馏。失败时抛 engine 的 LlmError（块号写在 message 里，界面直接显示）。
  * 这里不做重试——重试在 engine 内部按块做，外面再套一层会放大限流。
+ *
+ * 顺序：身世通道（A 路）先跑 → 对话块 + 汇总（B 路已拼在消息里）。
+ * 先跑身世的原因：它决定"她是谁"，且进度条上先走的这一段自然对应"先读设定再读聊天"。
  */
 export const runBlanketDistill = async (
   sessions: ParsedSession[],
   options: BlanketDistillOptions
 ): Promise<DistillRunResult> => {
-  const blocks = buildBlocks(sessions)
+  const docs = options.attachmentDocs ?? []
+  const blocks = buildBlocks(sessions, docs)
   if (!blocks.length) {
     throw new Error('选中的会话里没有可蒸馏的正文')
   }
   const client = createDeepseekClient({ apiKey: options.apiKey })
+  const personaDocs = docs.filter((doc) => doc.tag === 'persona' && doc.text)
+  // 进度时间锚点固定：UI 的"已用 6:12"靠 startedAt 算，不能每次回调都刷新
+  const personaStartedAt = Date.now()
+  const personaResult = personaDocs.length
+    ? await runPersonaDistill(client, personaDocs, {
+        onProgress: (p) =>
+          options.onProgress?.({
+            phase: 'blocks',
+            done: p.done,
+            total: p.total,
+            startedAt: personaStartedAt,
+            running: [],
+            runningSince: null,
+            lastBlockMs: null,
+          }),
+      })
+    : null
   const result = await runDistill(client, blocks, { onProgress: options.onProgress })
   // seed 不走模型、不新增调用：直接从原料末尾原封截（方案 §6.1）
   const seedTurns = pickSeedTurns(sessions)
-  return {
-    ...result,
-    pack: normalizePack({ ...result.pack, seedTurns }),
-  }
+  const pack = normalizePack({
+    ...result.pack,
+    ...(personaResult?.personaCard
+      ? { persona: { ...result.pack.persona, card: personaResult.personaCard } }
+      : {}),
+    ...(personaResult?.backstory ? { backstory: personaResult.backstory } : {}),
+    seedTurns,
+  })
+  const usage = personaResult
+    ? {
+        promptTokens: result.usage.promptTokens + personaResult.usage.promptTokens,
+        completionTokens: result.usage.completionTokens + personaResult.usage.completionTokens,
+      }
+    : result.usage
+  return { ...result, pack, usage }
 }

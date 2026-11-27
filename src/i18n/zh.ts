@@ -250,6 +250,7 @@ export const zh = {
   blanketImportScanCount: '已读 {done}/{total} 个会话',
   blanketImportSessionsFound: '共 {count} 个会话',
   blanketImportBroken: '{count} 个读不出，已跳过',
+  blanketImportAttachFound: '附件 {count} 份',
   blanketImportSearchTitlePlaceholder: '搜标题（如：晚安 / 旅行）',
   blanketImportSearchContentPlaceholder: '搜一句话（如：我有点累 / 晚安 被子）',
   blanketImportSearchTitle: '搜标题',
@@ -282,6 +283,14 @@ export const zh = {
   blanketImportBillBlocksValue: '{blocks} 块 · {calls} 次调用',
   blanketImportBillCost: '预估花费',
   blanketImportBillCostValue: '约 ¥{cost} · 约 {minutes} 分钟',
+  blanketImportBillAttach: '身世文档',
+  blanketImportBillAttachValue: '{count} 份 · {words}',
+  blanketImportAttachTitle: '这些附件也一起蒸进她的记忆',
+  blanketImportAttachPersona: '她的身世',
+  blanketImportAttachMaterial: '普通资料',
+  blanketImportAttachClipped: '（超出总量上限，已跳过大部）',
+  blanketImportAttachNote:
+    '「她的身世」单独整理成身世档案，不混进日常记忆；「普通资料」随聊天一起蒸。判错了就换一个——自动判定只是建议，最后以你选的为准。',
   blanketImportConfirmNote:
     '按谷价估算，工作日 9–12 / 14–18 点为峰价约 ×2；实际金额以账本为准（蒸馏完成后按实际用量记）。中途某一块失败会自动重试；整条失败后重新开始会再花一次，不会重复扣已成功的块。',
   distillErrUnauthorized: 'API Key 不对或已经失效：去「设置 → API Key」重新填一个，再点开始蒸馏',

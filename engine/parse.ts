@@ -15,6 +15,16 @@
 import JSZip from 'jszip';
 import { DISTILL_BLOCK_QUOTA_EARLY, DISTILL_BLOCK_QUOTA_MID, DISTILL_BLOCK_QUOTA_RECENT, DISTILL_BLOCK_WORDS } from './config.js';
 import { ZipDirectory, utf8Decode, type RangeReader } from './zip-reader.js';
+import {
+  capAttachments,
+  classifyAttachment,
+  countAttachmentWords,
+  decodeAttachmentText,
+  isAttachmentTooLarge,
+  isTextAttachmentName,
+  parseAttachmentPath,
+  type AttachmentDoc,
+} from './attachment-scan.js';
 
 // ── 类型 ─────────────────────────────────────────────────────
 
@@ -25,6 +35,21 @@ export interface ParsedMessage {
   at: string;
   /** 非 FINISHED 时的状态标记（如 "GENERATING"），正常为空 */
   unfinished: string;
+  /**
+   * 这条消息带的附件引用（v1.0.4 附件进蒸馏，2026-11-27）：只留元数据，正文另读。
+   * 只有 USER 消息会有；纯附件消息（无正文）也保留，text 为空串。
+   */
+  files?: ParsedFileRef[];
+}
+
+/** 附件引用：正文在 `chat_sessions/<id>_files/` 里，按 path 另读 */
+export interface ParsedFileRef {
+  /** 原始文件名（展示用） */
+  name: string;
+  /** 导出包内路径（可能为空，老包只给 export_path 的一部分） */
+  path: string;
+  /** 字节数（FILE 片段里有就给） */
+  size?: number;
 }
 
 export interface ParsedSession {
@@ -92,13 +117,15 @@ interface FragmentExtraction {
   thinkCount: number;
   thinkWords: number;
   fileCount: number;
+  files: ParsedFileRef[];
 }
 
-/** 只取 REQUEST(USER) / RESPONSE(ASSISTANT) 的字符串正文 */
+/** 只取 REQUEST(USER) / RESPONSE(ASSISTANT) 的字符串正文；FILE 片段只记引用不读内容 */
 export function messageText(m: Record<string, unknown>): FragmentExtraction {
   const isUser = m.role === 'USER';
   const frags = Array.isArray(m.fragments) ? (m.fragments as Record<string, unknown>[]) : [];
   const parts: string[] = [];
+  const files: ParsedFileRef[] = [];
   let thinkCount = 0;
   let thinkWords = 0;
   let fileCount = 0;
@@ -112,6 +139,13 @@ export function messageText(m: Record<string, unknown>): FragmentExtraction {
     }
     if (f.type === 'FILE') {
       fileCount++;
+      // 附件进蒸馏（2026-11-27）：FILE 片段带 file_name / export_path / file_size
+      const name = typeof f.file_name === 'string' ? f.file_name : '';
+      const path = typeof f.export_path === 'string' ? f.export_path : '';
+      const size = typeof f.file_size === 'number' ? f.file_size : undefined;
+      if (name || path) {
+        files.push({ name: name || path.split('/').pop() || '附件', path, ...(size !== undefined ? { size } : {}) });
+      }
       continue;
     }
     const isBody = (isUser && f.type === 'REQUEST') || (!isUser && f.type === 'RESPONSE');
@@ -120,7 +154,7 @@ export function messageText(m: Record<string, unknown>): FragmentExtraction {
     parts.push(f.content);
   }
 
-  return { text: parts.join('\n').trim(), thinkCount, thinkWords, fileCount };
+  return { text: parts.join('\n').trim(), thinkCount, thinkWords, fileCount, files };
 }
 
 // ── 单会话解析 ───────────────────────────────────────────────
@@ -139,7 +173,7 @@ export function parseSession(raw: string): ParsedSession {
   let emptyMessages = 0;
 
   for (const m of line) {
-    const { text, thinkCount: tc, thinkWords: tw, fileCount: fc } = messageText(m);
+    const { text, thinkCount: tc, thinkWords: tw, fileCount: fc, files } = messageText(m);
     thinkCount += tc;
     thinkWords += tw;
     fileCount += fc;
@@ -148,7 +182,8 @@ export function parseSession(raw: string): ParsedSession {
     const isUnfinished = status !== '' && status !== 'FINISHED';
     if (isUnfinished) unfinished++;
 
-    if (!text) {
+    // 纯附件消息（只有 FILE 没有正文）也保留：附件进蒸馏要它当锚点，不能当空消息丢（2026-11-27）
+    if (!text && !files.length) {
       emptyMessages++;
       continue;
     }
@@ -160,6 +195,7 @@ export function parseSession(raw: string): ParsedSession {
       text,
       at,
       unfinished: isUnfinished ? status : '',
+      ...(files.length ? { files } : {}),
     });
     words += text.length;
     if (isUser && at) userDays.add(at.slice(0, 10));
@@ -435,6 +471,72 @@ export async function loadSessions(
   });
 
   return collectSessions(entries, formatVersion, opts);
+}
+
+// ── 附件读取（附件进蒸馏方案 2026-11-27） ─────────────────────
+
+export interface AttachmentLoadResult {
+  /** 读出来的文本附件（已按整包上限裁剪） */
+  docs: AttachmentDoc[];
+  /** 跳过的条目：太大 / 读不出来（确认页按需提示，不阻塞导入） */
+  skipped: { path: string; reason: 'large' | 'error' }[];
+}
+
+/**
+ * 读导出包里所有文本附件（`chat_sessions/<id>_files/*`）。
+ *
+ * 只认文本扩展名：导出包里 96% 的体积是图片/文档原件（281MB 里的 270MB），
+ * 全读会把手机内存打爆；这里跳过一切二进制。
+ * `sessionIds` 给了就只读这些会话的附件（细读阶段用），不给读全包（粗扫阶段用）。
+ *
+ * 顺序：目录清单顺序即 ZIP 里出现顺序，按会话各自计数当判类的 order 参考。
+ */
+export async function loadAttachmentsFromReader(
+  reader: RangeReader,
+  sessionIds?: Set<string>,
+): Promise<AttachmentLoadResult> {
+  const dir = await ZipDirectory.open(reader);
+  const names = dir.listNames().filter((name) => {
+    const parsed = parseAttachmentPath(name);
+    if (!parsed || !isTextAttachmentName(parsed.name)) return false;
+    return !sessionIds || sessionIds.has(parsed.sessionId);
+  });
+
+  const skipped: AttachmentLoadResult['skipped'] = [];
+  const orderBySession = new Map<string, number>();
+  const docs = await mapLimit(names, 4, async (path) => {
+    const parsed = parseAttachmentPath(path);
+    if (!parsed) return null;
+    const info = dir.info(path);
+    if (info && isAttachmentTooLarge(info.uncompressedSize)) {
+      skipped.push({ path, reason: 'large' });
+      return null;
+    }
+    let text = '';
+    try {
+      text = decodeAttachmentText(await dir.readEntry(path)).trim();
+    } catch {
+      skipped.push({ path, reason: 'error' });
+      return null;
+    }
+    if (!text) return null;
+    const order = orderBySession.get(parsed.sessionId) ?? 0;
+    orderBySession.set(parsed.sessionId, order + 1);
+    const words = countAttachmentWords(text);
+    const doc: AttachmentDoc = {
+      id: `${parsed.sessionId}::${parsed.name}`,
+      sessionId: parsed.sessionId,
+      name: parsed.name,
+      path,
+      text,
+      words,
+      tag: classifyAttachment(parsed.name, words, order),
+      clipped: false,
+    };
+    return doc;
+  });
+
+  return { docs: capAttachments(docs.filter((doc): doc is AttachmentDoc => doc !== null)), skipped };
 }
 
 /**

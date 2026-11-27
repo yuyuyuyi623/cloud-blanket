@@ -10,6 +10,7 @@ import {
   planFor,
   selectAllSessions,
   selectSessions,
+  setAttachmentTag,
   setMinTurns,
   setQuery,
   setSearchMode,
@@ -74,6 +75,8 @@ export const BlanketImportDialog = () => {
   const hits = useBlanketImport((state) => state.hits)
   const searchProgress = useBlanketImport((state) => state.searchProgress)
   const searchError = useBlanketImport((state) => state.searchError)
+  const attachments = useBlanketImport((state) => state.attachments)
+  const attachmentTags = useBlanketImport((state) => state.attachmentTags)
   const apiKey = useSettings((state) => state.apiKey)
   // 蒸完自动弹一次角色卡：她刚醒来，第一眼该看见的是“她记了什么”，不是一句干巴巴的统计
   const createdRecord = useBlankets((state) =>
@@ -97,9 +100,22 @@ export const BlanketImportDialog = () => {
     return () => window.clearInterval(timer)
   }, [step])
 
-  const plan = useMemo(() => planFor(sessions, selected), [sessions, selected])
+  const plan = useMemo(
+    () => planFor(sessions, selected, attachments, attachmentTags),
+    [sessions, selected, attachments, attachmentTags],
+  )
   const estimate = plan.estimate
-  const selectedWords = plan.rows.reduce((sum, row) => sum + row.words, 0)
+  // 只算会话正文：身世文档在账单里单列一行，不能两头都算（预估翻倍）
+  const selectedWords = plan.rows
+    .filter((row) => row.sessionId !== '__attachments__')
+    .reduce((sum, row) => sum + row.words, 0)
+  /** 勾选会话里的附件（确认页列出来给人拍板） */
+  const selectedDocs = useMemo(
+    () => attachments.filter((doc) => doc.text && selected.includes(doc.sessionId)),
+    [attachments, selected],
+  )
+  const personaDocs = selectedDocs.filter((doc) => (attachmentTags[doc.id] ?? doc.tag) === 'persona')
+  const personaWords = personaDocs.reduce((sum, doc) => sum + doc.words, 0)
 
   /** 筛选只改"看得见什么"：勾选照旧，所以要把"筛掉了但还勾着"的数量单独算出来 */
   const visible = useMemo(
@@ -270,6 +286,9 @@ export const BlanketImportDialog = () => {
                 <div className={styles.subtle}>
                   {t('blanketImportSessionsFound', { count: sessions.length })}
                   {broken > 0 ? ` · ${t('blanketImportBroken', { count: broken })}` : ''}
+                  {attachments.length
+                    ? ` · ${t('blanketImportAttachFound', { count: attachments.length })}`
+                    : ''}
                 </div>
               </div>
               <div className={styles.bulkActions}>
@@ -437,6 +456,41 @@ export const BlanketImportDialog = () => {
         {step === 'confirm' ? (
           <>
             <p className={styles.intro}>{t('blanketImportConfirmIntro')}</p>
+            {/* 附件判类（方案 §3.2 第三层）：自动判定只是建议，这里由人拍板 */}
+            {selectedDocs.length ? (
+              <div className={styles.attachBlock}>
+                <div className={styles.attachTitle}>{t('blanketImportAttachTitle')}</div>
+                {selectedDocs.map((doc) => {
+                  const tag = attachmentTags[doc.id] ?? doc.tag
+                  return (
+                    <div key={doc.id} className={styles.attachRow}>
+                      <span className={styles.attachName}>
+                        {doc.name}
+                        {doc.clipped ? ` ${t('blanketImportAttachClipped')}` : ''}
+                      </span>
+                      <span className={styles.attachMeta}>{wordsText(doc.words)}</span>
+                      <div className={styles.chips}>
+                        <button
+                          type="button"
+                          className={tag === 'persona' ? `${styles.chip} ${styles.chipOn}` : styles.chip}
+                          onClick={() => setAttachmentTag(doc.id, 'persona')}
+                        >
+                          {t('blanketImportAttachPersona')}
+                        </button>
+                        <button
+                          type="button"
+                          className={tag === 'material' ? `${styles.chip} ${styles.chipOn}` : styles.chip}
+                          onClick={() => setAttachmentTag(doc.id, 'material')}
+                        >
+                          {t('blanketImportAttachMaterial')}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+                <p className={styles.note}>{t('blanketImportAttachNote')}</p>
+              </div>
+            ) : null}
             <div className={styles.bill}>
               <div className={styles.billRow}>
                 <span>{t('blanketImportBillSessions')}</span>
@@ -446,6 +500,17 @@ export const BlanketImportDialog = () => {
                 <span>{t('blanketImportBillWords')}</span>
                 <span>{wordsText(selectedWords)}</span>
               </div>
+              {personaDocs.length ? (
+                <div className={styles.billRow}>
+                  <span>{t('blanketImportBillAttach')}</span>
+                  <span>
+                    {t('blanketImportBillAttachValue', {
+                      count: personaDocs.length,
+                      words: wordsText(personaWords),
+                    })}
+                  </span>
+                </div>
+              ) : null}
               <div className={styles.billRow}>
                 <span>{t('blanketImportBillBlocks')}</span>
                 <span>

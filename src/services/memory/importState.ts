@@ -21,8 +21,10 @@ import {
   collectSessionTextsFromFile,
   readSelectedSessions,
   scanArchive,
+  scanArchiveAttachments,
   type ImportPlan,
 } from './importBlanket.js'
+import type { AttachmentDoc, AttachmentTag } from '../../../engine/attachment-scan.js'
 import { createBlanket } from './importStore.js'
 import { refreshBlankets } from './blanketStore.js'
 import { describeDistillError, describeScanError } from './describeImportError.js'
@@ -68,6 +70,10 @@ export interface BlanketImportState {
   searchProgress: { done: number; total: number } | null
   /** 内容搜索自己的错误（不能跟蒸馏错误混在一个字段里，否则会把上一步的账盖掉） */
   searchError: string | null
+  /** 粗扫阶段读到的文本附件（附件进蒸馏，2026-11-27） */
+  attachments: AttachmentDoc[]
+  /** 确认页人工改过的标签（id → 身世/普通资料）；没改的走启发式默认值 */
+  attachmentTags: Record<string, AttachmentTag>
 }
 
 const initial = {
@@ -89,6 +95,8 @@ const initial = {
   hits: null,
   searchProgress: null,
   searchError: null,
+  attachments: [],
+  attachmentTags: {},
 }
 
 export const useBlanketImport = create<BlanketImportState>(() => ({ ...initial }))
@@ -139,15 +147,21 @@ export const chooseArchive = async (file: File): Promise<void> => {
     searchError: null,
   })
   try {
-    // 大包（几百 MB）解压要几十秒，必须让用户看到"还在动"
-    const result = await scanArchive(file, (done, total) =>
-      useBlanketImport.setState({ scanProgress: { done, total } })
-    )
+    // 大包（几百 MB）解压要几十秒，必须让用户看到"还在动"；
+    // 附件清单同时粗扫（只读文本类，图片全跳）——确认页要按它出预估
+    const [result, attachments] = await Promise.all([
+      scanArchive(file, (done, total) =>
+        useBlanketImport.setState({ scanProgress: { done, total } })
+      ),
+      scanArchiveAttachments(file).catch(() => [] as AttachmentDoc[]),
+    ])
     useBlanketImport.setState({
       step: 'select',
       sessions: result.sessions,
       broken: result.broken.length,
       scanProgress: null,
+      attachments,
+      attachmentTags: Object.fromEntries(attachments.map((doc) => [doc.id, doc.tag])),
       // 默认一个都不勾：哪些对话"真的是她"，只有本人能判断。
       // 顺手全选等于替他做了这单子最要紧的那个决定，而代价是钱和一份不像她的记忆。
       selected: [],
@@ -260,18 +274,35 @@ export const goConfirm = () => useBlanketImport.setState({ step: 'confirm', erro
 
 export const backToSelect = () => useBlanketImport.setState({ step: 'select', error: null })
 
-/** 勾选对应的计划与预估（勾选变化时界面实时算） */
-export const planFor = (sessions: ParsedSession[], selected: string[]): ImportPlan => {
+/** 勾选对应的计划与预估（勾选变化时界面实时算）；附件按选中会话过滤、标签取人工改过的值 */
+export const planFor = (
+  sessions: ParsedSession[],
+  selected: string[],
+  attachments: AttachmentDoc[] = [],
+  tags: Record<string, AttachmentTag> = {},
+): ImportPlan => {
   const chosen = new Set(selected)
-  return buildPlan(sessions.filter((session) => chosen.has(session.id)))
+  const docs = attachments
+    .filter((doc) => chosen.has(doc.sessionId))
+    .map((doc) => ({ ...doc, tag: tags[doc.id] ?? doc.tag }))
+  return buildPlan(
+    sessions.filter((session) => chosen.has(session.id)),
+    docs,
+  )
 }
+
+/** 确认页改附件标签（她的身世 / 普通资料）——自动判定只是默认值，由人拍板 */
+export const setAttachmentTag = (id: string, tag: AttachmentTag) =>
+  useBlanketImport.setState((state) => ({
+    attachmentTags: { ...state.attachmentTags, [id]: tag },
+  }))
 
 /**
  * 真花钱那一步：细读选中会话 → 蒸馏 → 落库。
  * 失败不静默：错误挂在 state 上，已花的调用不会因为重试被清掉（重试是再花一次，由用户决定）。
  */
 export const startDistill = async (apiKey: string): Promise<void> => {
-  const { file, selected } = useBlanketImport.getState()
+  const { file, selected, attachments, attachmentTags } = useBlanketImport.getState()
   if (!file) {
     useBlanketImport.setState({ error: translate('blanketImportNoFile') })
     return
@@ -284,9 +315,14 @@ export const startDistill = async (apiKey: string): Promise<void> => {
     if (!loaded.sessions.length) {
       throw new Error('选中的会话没有读出正文，请重新选择文件')
     }
+    // 附件只带选中会话的，标签以确认页人改为准（启发式只是默认值）
+    const attachmentDocs = attachments
+      .filter((doc) => ids.has(doc.sessionId) && doc.text)
+      .map((doc) => ({ ...doc, tag: attachmentTags[doc.id] ?? doc.tag }))
     const { record, usage } = await createBlanket({
       apiKey,
       parsedSessions: loaded.sessions,
+      attachmentDocs,
       onProgress: (progress) => useBlanketImport.setState({ progress }),
     })
     // 蒸馏记一笔：按蒸馏返回的实际 token 记账（2026-11-25 对账修正——

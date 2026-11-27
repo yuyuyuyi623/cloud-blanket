@@ -43,8 +43,8 @@ export interface CreateBlanketResult {
 
 /** 蒸馏 → 原文入库 → 被子记录。任一步失败都会把刚写的原料清掉，不留半床被子。 */
 export const createBlanket = async (options: CreateBlanketOptions): Promise<CreateBlanketResult> => {
-  const { parsedSessions, apiKey, name, onProgress } = options
-  const result = await runBlanketDistill(parsedSessions, { apiKey, onProgress })
+  const { parsedSessions, apiKey, name, attachmentDocs, onProgress } = options
+  const result = await runBlanketDistill(parsedSessions, { apiKey, attachmentDocs, onProgress })
 
   const base = name?.trim() || defaultBlanketName(result, parsedSessions)
   // 同名被子自动加序号（第二份起（2）（3）……），不然侧栏两床同名分不清哪床是新的

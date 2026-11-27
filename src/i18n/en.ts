@@ -256,6 +256,7 @@ export const en = {
   blanketImportScanCount: 'Read {done}/{total} chats',
   blanketImportSessionsFound: '{count} chats in total',
   blanketImportBroken: '{count} unreadable, skipped',
+  blanketImportAttachFound: '{count} attachment(s)',
   blanketImportSearchTitlePlaceholder: 'Search titles (e.g. good night / trip)',
   blanketImportSearchContentPlaceholder: 'Search a line (e.g. I am tired / good night)',
   blanketImportSearchTitle: 'Titles',
@@ -288,6 +289,14 @@ export const en = {
   blanketImportBillBlocksValue: '{blocks} blocks · {calls} calls',
   blanketImportBillCost: 'Estimated cost',
   blanketImportBillCostValue: 'about ¥{cost} · about {minutes} min',
+  blanketImportBillAttach: 'Backstory docs',
+  blanketImportBillAttachValue: '{count} file(s) · {words}',
+  blanketImportAttachTitle: 'These attachments go into her memory too',
+  blanketImportAttachPersona: 'Her backstory',
+  blanketImportAttachMaterial: 'Reference material',
+  blanketImportAttachClipped: '(over the total cap, most of it skipped)',
+  blanketImportAttachNote:
+    'Backstory docs become a separate backstory archive, not mixed into everyday memories; reference material is distilled along with the chats. If the guess is wrong, just flip it — the auto tag is only a suggestion.',
   blanketImportConfirmNote:
     'Estimated at off-peak prices; weekdays 9–12 / 14–18 (Beijing time) are peak hours, roughly ×2. Actual charge is recorded in the Ledger from real usage after distillation. A failed block retries automatically; restarting after a full failure costs again, finished blocks are never charged twice.',
   distillErrUnauthorized: 'The API Key is wrong or revoked: fill in a fresh one in Settings → API Key, then start again.',
